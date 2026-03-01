@@ -14,6 +14,9 @@ source venv/bin/activate
 echo "=== Installing Python dependencies ==="
 pip install -r requirements.txt
 
+echo "=== Adding user to input group (for PS4 controller) ==="
+sudo usermod -aG input "$USER"
+
 echo "=== Installing systemd service ==="
 sudo cp noisyneighbors.service /etc/systemd/system/
 sudo systemctl daemon-reload
