@@ -121,6 +121,11 @@ Connect a DualShock 4 controller via USB. The dashboard shows its connection sta
 
 The setup script automatically adds the user to the `input` group (required for controller access). A reboot may be needed after the first install.
 
+## Tips for best results
+
+- **Place the Raspberry Pi and USB speakerphone high up**, close to the ceiling (on top of a tall cabinet or shelf). This improves both detection sensitivity and sound projection toward the neighbors above.
+- **PS4 controller placement**: for maximum impact, place the vibrating controller on top of a glass bowl or jar. The glass amplifies the vibrations and transmits them through the ceiling.
+
 ## Troubleshooting
 
 ### No sound output
