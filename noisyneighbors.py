@@ -199,8 +199,8 @@ def find_ps4_controller():
     return None
 
 
-def vibrate_ps4(duration=2.0):
-    """Trigger vibration on PS4 controller for given duration."""
+def vibrate_ps4(duration=2.0, intensity=100):
+    """Trigger vibration on PS4 controller for given duration and intensity (0-100)."""
     import evdev
     from evdev import ecodes, ff
 
@@ -210,7 +210,8 @@ def vibrate_ps4(duration=2.0):
         return
 
     try:
-        rumble = ff.Rumble(strong_magnitude=0xFFFF, weak_magnitude=0xFFFF)
+        mag = int(0xFFFF * max(0, min(100, intensity)) / 100)
+        rumble = ff.Rumble(strong_magnitude=mag, weak_magnitude=mag)
         effect = ff.Effect(
             ecodes.FF_RUMBLE,
             -1,  # id (auto-assign)
@@ -296,6 +297,9 @@ def on_connect():
         "mode": state["config"].get("replay_mode", "echo"),
         "available": AVAILABLE_SOUNDS,
     })
+    socketio.emit("vibration_intensity", {
+        "intensity": state["config"].get("vibration_intensity", 100),
+    })
     # Send device lists
     socketio.emit("input_devices", {
         "devices": list_input_devices(),
@@ -360,6 +364,14 @@ def on_set_replay_mode(data):
             "available": AVAILABLE_SOUNDS,
         })
         log.info("Replay mode set to '%s' from dashboard", mode)
+
+
+@socketio.on("set_vibration_intensity")
+def on_set_vibration_intensity(data):
+    intensity = int(data["intensity"])
+    state["config"]["vibration_intensity"] = intensity
+    save_config(state["config"])
+    log.info("Vibration intensity set to %d%% from dashboard", intensity)
 
 
 @socketio.on("set_input_device")
@@ -551,7 +563,8 @@ def audio_loop():
                 log.info("Playing boom (%.2fs, mode=%s)...", duration, replay_mode)
                 socketio.emit("status", {"state": "boom"})
                 if replay_mode == "vibration":
-                    vibrate_ps4(duration=duration)
+                    intensity = state["config"].get("vibration_intensity", 100)
+                    vibrate_ps4(duration=duration, intensity=intensity)
                 elif replay_mode == "echo":
                     play_audio(boom_audio, sr, cur_alsa, out_sr)
                 else:

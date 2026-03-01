@@ -301,6 +301,11 @@
             <select class="sound-select" id="replayMode" onchange="setReplayMode(this.value)">
                 <option value="echo">Echo (replay the boom)</option>
             </select>
+            <div class="slider-row" id="vibrationRow" style="display: none;">
+                <label>Intensity</label>
+                <input type="range" id="vibrationIntensity" min="10" max="100" step="10" value="100">
+                <span class="slider-value" id="vibrationValue">100%</span>
+            </div>
         </div>
 
         <div class="card">
@@ -474,11 +479,28 @@
                 if (s === data.mode) opt.selected = true;
                 sel.appendChild(opt);
             });
+            document.getElementById('vibrationRow').style.display = data.mode === 'vibration' ? 'flex' : 'none';
         });
 
         function setReplayMode(mode) {
             socket.emit('set_replay_mode', { mode: mode });
+            document.getElementById('vibrationRow').style.display = mode === 'vibration' ? 'flex' : 'none';
         }
+
+        // Vibration intensity
+        var vibrationSlider = document.getElementById('vibrationIntensity');
+        vibrationSlider.addEventListener('input', function() {
+            document.getElementById('vibrationValue').textContent = this.value + '%';
+        });
+        vibrationSlider.addEventListener('change', function() {
+            socket.emit('set_vibration_intensity', { intensity: parseInt(this.value) });
+            showSaved();
+        });
+
+        socket.on('vibration_intensity', function(data) {
+            vibrationSlider.value = data.intensity;
+            document.getElementById('vibrationValue').textContent = data.intensity + '%';
+        });
 
         // Boom detection event
         socket.on('boom', function(data) {
