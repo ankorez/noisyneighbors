@@ -301,6 +301,20 @@
             <select class="sound-select" id="replayMode" onchange="setReplayMode(this.value)">
                 <option value="echo">Echo (replay the boom)</option>
             </select>
+        </div>
+
+        <div class="card">
+            <h2>PS4 Controller</h2>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div id="ps4Dot" style="width: 10px; height: 10px; border-radius: 50%; background: #666;"></div>
+                    <span id="ps4Status" style="font-size: 14px; color: #888;">Not connected</span>
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <span style="font-size: 14px; color: #888;">Vibrate on boom</span>
+                    <input type="checkbox" id="ps4Toggle" onchange="togglePs4(this.checked)" style="width: 18px; height: 18px; cursor: pointer;">
+                </label>
+            </div>
             <div class="slider-row" id="vibrationRow" style="display: none;">
                 <label>Intensity</label>
                 <input type="range" id="vibrationIntensity" min="10" max="100" step="10" value="100">
@@ -466,7 +480,6 @@
             hammer: 'Hammer',
             honk: 'Honk',
             siren: 'Siren',
-            vibration: 'Vibration (PS4 controller)'
         };
 
         socket.on('replay_mode', function(data) {
@@ -479,15 +492,36 @@
                 if (s === data.mode) opt.selected = true;
                 sel.appendChild(opt);
             });
-            document.getElementById('vibrationRow').style.display = data.mode === 'vibration' ? 'flex' : 'none';
         });
 
         function setReplayMode(mode) {
             socket.emit('set_replay_mode', { mode: mode });
-            document.getElementById('vibrationRow').style.display = mode === 'vibration' ? 'flex' : 'none';
         }
 
-        // Vibration intensity
+        // PS4 Controller
+        socket.on('ps4_status', function(data) {
+            var dot = document.getElementById('ps4Dot');
+            var status = document.getElementById('ps4Status');
+            var toggle = document.getElementById('ps4Toggle');
+            if (data.connected) {
+                dot.style.background = '#4ecca3';
+                status.textContent = 'Connected';
+            } else {
+                dot.style.background = '#666';
+                status.textContent = 'Not connected';
+            }
+            toggle.checked = data.enabled;
+            document.getElementById('vibrationRow').style.display = data.enabled ? 'flex' : 'none';
+            document.getElementById('vibrationIntensity').value = data.intensity;
+            document.getElementById('vibrationValue').textContent = data.intensity + '%';
+        });
+
+        function togglePs4(enabled) {
+            socket.emit('toggle_ps4_vibration', { enabled: enabled });
+            document.getElementById('vibrationRow').style.display = enabled ? 'flex' : 'none';
+            showSaved();
+        }
+
         var vibrationSlider = document.getElementById('vibrationIntensity');
         vibrationSlider.addEventListener('input', function() {
             document.getElementById('vibrationValue').textContent = this.value + '%';
@@ -495,11 +529,6 @@
         vibrationSlider.addEventListener('change', function() {
             socket.emit('set_vibration_intensity', { intensity: parseInt(this.value) });
             showSaved();
-        });
-
-        socket.on('vibration_intensity', function(data) {
-            vibrationSlider.value = data.intensity;
-            document.getElementById('vibrationValue').textContent = data.intensity + '%';
         });
 
         // Boom detection event

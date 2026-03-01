@@ -170,7 +170,7 @@ def play_audio(audio, sr, alsa_device, out_sr):
 
 SOUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sounds")
 
-AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren", "vibration"]
+AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren"]
 
 
 def play_sound_file(name, alsa_device):
@@ -297,7 +297,14 @@ def on_connect():
         "mode": state["config"].get("replay_mode", "echo"),
         "available": AVAILABLE_SOUNDS,
     })
-    socketio.emit("vibration_intensity", {
+    # PS4 controller status
+    ps4 = find_ps4_controller()
+    ps4_connected = ps4 is not None
+    if ps4:
+        ps4.close()
+    socketio.emit("ps4_status", {
+        "connected": ps4_connected,
+        "enabled": state["config"].get("ps4_vibration", False),
         "intensity": state["config"].get("vibration_intensity", 100),
     })
     # Send device lists
@@ -364,6 +371,14 @@ def on_set_replay_mode(data):
             "available": AVAILABLE_SOUNDS,
         })
         log.info("Replay mode set to '%s' from dashboard", mode)
+
+
+@socketio.on("toggle_ps4_vibration")
+def on_toggle_ps4_vibration(data):
+    enabled = bool(data["enabled"])
+    state["config"]["ps4_vibration"] = enabled
+    save_config(state["config"])
+    log.info("PS4 vibration %s from dashboard", "enabled" if enabled else "disabled")
 
 
 @socketio.on("set_vibration_intensity")
@@ -562,10 +577,17 @@ def audio_loop():
                 replay_mode = state["config"].get("replay_mode", "echo")
                 log.info("Playing boom (%.2fs, mode=%s)...", duration, replay_mode)
                 socketio.emit("status", {"state": "boom"})
-                if replay_mode == "vibration":
+                # Trigger PS4 vibration in parallel if enabled
+                if state["config"].get("ps4_vibration", False):
                     intensity = state["config"].get("vibration_intensity", 100)
-                    vibrate_ps4(duration=duration, intensity=intensity)
-                elif replay_mode == "echo":
+                    vib_thread = threading.Thread(
+                        target=vibrate_ps4,
+                        args=(duration, intensity),
+                        daemon=True,
+                    )
+                    vib_thread.start()
+
+                if replay_mode == "echo":
                     play_audio(boom_audio, sr, cur_alsa, out_sr)
                 else:
                     play_sound_file(replay_mode, cur_alsa)
