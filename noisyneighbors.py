@@ -148,6 +148,11 @@ def play_audio(audio, sr, alsa_device, out_sr):
         indices = np.linspace(0, len(audio) - 1, n_samples)
         audio = np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
 
+    # Normalize to maximum volume
+    peak = np.max(np.abs(audio))
+    if peak > 0:
+        audio = audio / peak
+
     audio_int16 = (audio * 32767).astype(np.int16)
     stereo = np.column_stack([audio_int16, audio_int16])
 
