@@ -373,6 +373,28 @@ def on_set_replay_mode(data):
         log.info("Replay mode set to '%s' from dashboard", mode)
 
 
+@socketio.on("test_sound")
+def on_test_sound():
+    cfg = state["config"]
+    alsa_device = cfg.get("alsa_device") or detect_alsa_device()
+    mode = cfg.get("replay_mode", "echo")
+    if mode == "echo":
+        # Play a short beep for echo test
+        sr = 48000
+        t = np.linspace(0, 0.5, int(sr * 0.5), dtype=np.float32)
+        audio = np.sin(2 * np.pi * 440 * t) * 0.8
+        play_audio(audio, sr, alsa_device, sr)
+    else:
+        play_sound_file(mode, alsa_device)
+    log.info("Test sound played (mode=%s)", mode)
+
+
+@socketio.on("test_vibration")
+def on_test_vibration():
+    intensity = state["config"].get("vibration_intensity", 100)
+    vibrate_ps4(duration=1.0, intensity=intensity)
+
+
 @socketio.on("toggle_ps4_vibration")
 def on_toggle_ps4_vibration(data):
     enabled = bool(data["enabled"])
