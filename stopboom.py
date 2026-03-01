@@ -216,11 +216,19 @@ def on_connect():
 
 @socketio.on("save_config")
 def on_save_config(data):
+    try:
+        t = float(data["threshold"])
+        cd = int(data["cooldown_seconds"])
+        pre = float(data["pre_boom_seconds"])
+        post = float(data["post_boom_seconds"])
+    except (TypeError, ValueError) as e:
+        log.warning("Config invalide ignorée: %s", e)
+        return
     cfg = state["config"]
-    cfg["threshold"] = data["threshold"]
-    cfg["cooldown_seconds"] = data["cooldown_seconds"]
-    cfg["pre_boom_seconds"] = data["pre_boom_seconds"]
-    cfg["post_boom_seconds"] = data["post_boom_seconds"]
+    cfg["threshold"] = t
+    cfg["cooldown_seconds"] = cd
+    cfg["pre_boom_seconds"] = pre
+    cfg["post_boom_seconds"] = post
     save_config(cfg)
     state["config"] = cfg
     log.info("Config mise à jour depuis le dashboard")
@@ -297,14 +305,16 @@ def audio_loop():
     state["cb_state"] = cb_state
 
     def get_cfg_values():
-        """Read live config values."""
+        """Read live config values (with safe fallbacks)."""
         c = state["config"]
-        return (
-            c.get("threshold", 0.15),
-            int(sr * c.get("pre_boom_seconds", 1.0)),
-            int(sr * c.get("post_boom_seconds", 1.5)),
-            c.get("cooldown_seconds", 5),
-        )
+        try:
+            t = float(c.get("threshold") or 0.15)
+            pre = int(sr * float(c.get("pre_boom_seconds") or 1.0))
+            post = int(sr * float(c.get("post_boom_seconds") or 1.5))
+            cd = float(c.get("cooldown_seconds") or 5)
+        except (TypeError, ValueError):
+            t, pre, post, cd = 0.15, int(sr * 1.0), int(sr * 1.5), 5
+        return t, pre, post, cd
 
     threshold, pre_samples, post_samples, cooldown = get_cfg_values()
     buffer_len = int(sr * 3)  # 3 seconds buffer
@@ -316,52 +326,55 @@ def audio_loop():
         nonlocal rms_counter
         s = cb_state
 
-        if status:
-            log.warning("Audio status: %s", status)
+        try:
+            if status:
+                log.warning("Audio status: %s", status)
 
-        if s["paused"]:
-            return
+            if s["paused"]:
+                return
 
-        threshold, pre_samples, post_samples, _ = get_cfg_values()
+            threshold, pre_samples, post_samples, _ = get_cfg_values()
 
-        if s["boom_detected"]:
-            remaining = post_samples - s["post_recorded"]
-            to_copy = min(frames, remaining)
-            s["post_recording"][s["post_recorded"]:s["post_recorded"] + to_copy] = indata[:to_copy]
-            s["post_recorded"] += to_copy
+            if s["boom_detected"]:
+                remaining = post_samples - s["post_recorded"]
+                to_copy = min(frames, remaining)
+                s["post_recording"][s["post_recorded"]:s["post_recorded"] + to_copy] = indata[:to_copy]
+                s["post_recorded"] += to_copy
 
-            if s["post_recorded"] >= post_samples:
-                s["boom_detected"] = False
-                pre_start = (s["write_pos"] - pre_samples) % buffer_len
-                if pre_start < s["write_pos"]:
-                    pre_audio = ring[pre_start:s["write_pos"]].copy()
-                else:
-                    pre_audio = np.concatenate([
-                        ring[pre_start:],
-                        ring[:s["write_pos"]]
-                    ])
-                boom_audio = np.concatenate([pre_audio, s["post_recording"]])
-                s["paused"] = True
-                boom_queue.put(boom_audio)
-            return
+                if s["post_recorded"] >= post_samples:
+                    s["boom_detected"] = False
+                    pre_start = (s["write_pos"] - pre_samples) % buffer_len
+                    if pre_start < s["write_pos"]:
+                        pre_audio = ring[pre_start:s["write_pos"]].copy()
+                    else:
+                        pre_audio = np.concatenate([
+                            ring[pre_start:],
+                            ring[:s["write_pos"]]
+                        ])
+                    boom_audio = np.concatenate([pre_audio, s["post_recording"]])
+                    s["paused"] = True
+                    boom_queue.put(boom_audio)
+                return
 
-        for i in range(frames):
-            ring[s["write_pos"]] = indata[i]
-            s["write_pos"] = (s["write_pos"] + 1) % buffer_len
+            for i in range(frames):
+                ring[s["write_pos"]] = indata[i]
+                s["write_pos"] = (s["write_pos"] + 1) % buffer_len
 
-        level = rms(indata)
+            level = rms(indata)
 
-        # Send RMS to dashboard every ~5 blocks
-        rms_counter += 1
-        if rms_counter % 5 == 0:
-            socketio.emit("rms", {"level": float(level)})
+            # Send RMS to dashboard every ~5 blocks
+            rms_counter += 1
+            if rms_counter % 5 == 0:
+                socketio.emit("rms", {"level": float(level)})
 
-        if level > threshold:
-            log.info("BOOM détecté! RMS=%.4f (seuil=%.4f)", level, threshold)
-            socketio.emit("status", {"state": "boom"})
-            s["boom_detected"] = True
-            s["post_recording"] = np.zeros((post_samples, channels), dtype=np.float32)
-            s["post_recorded"] = 0
+            if level > threshold:
+                log.info("BOOM détecté! RMS=%.4f (seuil=%.4f)", level, threshold)
+                socketio.emit("status", {"state": "boom"})
+                s["boom_detected"] = True
+                s["post_recording"] = np.zeros((post_samples, channels), dtype=np.float32)
+                s["post_recorded"] = 0
+        except Exception as e:
+            log.error("Erreur dans le callback audio: %s", e)
 
     log.info("StopBoom démarré")
     log.info("  device=[%s] %s", device, dev_info["name"])

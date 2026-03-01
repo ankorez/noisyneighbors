@@ -204,6 +204,13 @@
             margin-top: 12px;
         }
         .btn-save:hover { background: #3db88c; }
+        .btn-reset {
+            background: #0f3460;
+            color: #888;
+            margin-top: 12px;
+            margin-left: 8px;
+        }
+        .btn-reset:hover { background: #1a4a8a; color: #eee; }
         .save-feedback {
             display: inline-block;
             margin-left: 12px;
@@ -297,6 +304,7 @@
                 </div>
             </div>
             <button class="btn btn-save" onclick="saveSettings()">Sauvegarder</button>
+            <button class="btn btn-reset" onclick="resetDefaults()">Par defaut</button>
             <span class="save-feedback" id="saveFeedback">Sauvegarde !</span>
         </div>
     </div>
@@ -426,19 +434,36 @@
             });
         });
 
+        function parseNum(id) {
+            return parseFloat(document.getElementById(id).value.replace(',', '.'));
+        }
+
         function saveSettings() {
-            const settings = {
-                threshold: parseFloat(document.getElementById('threshold').value),
-                cooldown_seconds: parseInt(document.getElementById('cooldown_seconds').value),
-                pre_boom_seconds: parseFloat(document.getElementById('pre_boom_seconds').value),
-                post_boom_seconds: parseFloat(document.getElementById('post_boom_seconds').value),
+            var t = parseNum('threshold');
+            var cd = parseNum('cooldown_seconds');
+            var pre = parseNum('pre_boom_seconds');
+            var post = parseNum('post_boom_seconds');
+            if (isNaN(t) || isNaN(cd) || isNaN(pre) || isNaN(post)) return;
+            var settings = {
+                threshold: t,
+                cooldown_seconds: Math.round(cd),
+                pre_boom_seconds: pre,
+                post_boom_seconds: post,
             };
             threshold = settings.threshold;
             updateThresholdLine();
             socket.emit('save_config', settings);
-            const fb = document.getElementById('saveFeedback');
+            var fb = document.getElementById('saveFeedback');
             fb.style.opacity = 1;
             setTimeout(function() { fb.style.opacity = 0; }, 2000);
+        }
+
+        function resetDefaults() {
+            document.getElementById('threshold').value = 0.15;
+            document.getElementById('cooldown_seconds').value = 5;
+            document.getElementById('pre_boom_seconds').value = 1.0;
+            document.getElementById('post_boom_seconds').value = 1.5;
+            saveSettings();
         }
 
         // Volume slider
