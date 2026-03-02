@@ -582,7 +582,6 @@ def audio_loop():
             log.info("Listening... (Ctrl+C to stop)")
             while True:
                 if state["restart_audio"]:
-                    state["restart_audio"] = False
                     log.info("Audio restart requested")
                     return
                 try:
@@ -645,9 +644,10 @@ def audio_loop():
                     socketio.emit("status", {"state": "cooldown"})
                     time.sleep(cooldown)
 
-                cb_state["paused"] = False
-                socketio.emit("status", {"state": "listening"})
-                log.info("Listening resumed")
+                cb_state["paused"] = not state["enabled"]
+                status = "listening" if state["enabled"] else "disabled"
+                socketio.emit("status", {"state": status})
+                log.info("Listening resumed (enabled=%s)", state["enabled"])
 
     except KeyboardInterrupt:
         log.info("Shutdown requested")
@@ -676,11 +676,7 @@ def main():
             try:
                 audio_loop()
             except Exception as e:
-                log.error("Audio loop crashed, restarting in 2s: %s", e)
-                time.sleep(2)
-                continue
-            if not state["restart_audio"]:
-                break
+                log.error("Audio loop crashed, restarting: %s", e)
             state["restart_audio"] = False
             time.sleep(0.5)
 
