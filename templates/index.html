@@ -8,63 +8,62 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #1a1a2e;
-            color: #eee;
-            min-height: 100vh;
+            background: #1a1a2e; color: #eee; min-height: 100vh;
         }
         .header {
-            background: #16213e;
-            padding: 20px;
-            text-align: center;
-            border-bottom: 2px solid #0f3460;
+            background: #16213e; padding: 16px 20px;
+            text-align: center; border-bottom: 2px solid #0f3460;
+            position: sticky; top: 0; z-index: 50;
         }
-        .header h1 { font-size: 24px; }
-        .header .subtitle { color: #888; font-size: 14px; margin-top: 4px; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header h1 { font-size: 20px; }
+        .header .subtitle { color: #888; font-size: 12px; margin-top: 2px; }
+
+        /* Tab nav (bottom) */
+        .tab-nav {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: #16213e; border-top: 2px solid #0f3460;
+            display: flex; z-index: 100;
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+        .tab-btn {
+            flex: 1; padding: 10px 4px 8px;
+            background: none; border: none; color: #555;
+            cursor: pointer; display: flex; flex-direction: column;
+            align-items: center; gap: 3px;
+            font-size: 11px; font-family: inherit;
+            transition: color 0.2s;
+        }
+        .tab-btn.active { color: #4ecca3; }
+        .tab-btn .tab-icon { font-size: 22px; line-height: 1; }
+
+        /* Tab content */
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 16px 16px 90px; }
+
         .card {
-            background: #16213e;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
+            background: #16213e; border-radius: 12px;
+            padding: 20px; margin-bottom: 16px;
         }
         .card h2 {
-            font-size: 16px;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
+            font-size: 16px; color: #888;
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
         }
 
         /* Status */
-        .status-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 20px;
-            font-weight: bold;
-        }
+        .status-row { display: flex; align-items: center; justify-content: space-between; }
+        .status-indicator { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: bold; }
         .status-dot {
-            width: 16px; height: 16px;
-            border-radius: 50%;
-            background: #4ecca3;
-            animation: pulse 2s infinite;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #4ecca3; animation: pulse 2s infinite;
         }
         .status-dot.boom { background: #e23e57; animation: none; }
         .status-dot.cooldown { background: #f0a500; animation: none; }
         .status-dot.disabled { background: #666; animation: none; }
         .toggle-btn {
-            padding: 8px 20px;
-            border: none;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.3s;
+            padding: 8px 20px; border: none; border-radius: 20px;
+            font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.3s;
         }
         .toggle-btn.on { background: #4ecca3; color: #1a1a2e; }
         .toggle-btn.off { background: #666; color: #eee; }
@@ -72,60 +71,28 @@
         .boom-count { font-size: 48px; font-weight: bold; color: #e23e57; }
         .boom-count-label { color: #888; font-size: 14px; }
 
-        /* VU Meter */
-        .vu-container {
-            height: 32px; background: #0f3460;
-            border-radius: 6px; overflow: hidden; position: relative;
-        }
-        .vu-bar {
-            height: 100%; width: 0%;
-            background: linear-gradient(90deg, #4ecca3, #f0a500, #e23e57);
-            transition: width 0.1s; border-radius: 6px;
-        }
-        .vu-threshold {
-            position: absolute; top: 0; height: 100%;
-            width: 2px; background: #fff; opacity: 0.6;
-        }
-        .vu-labels {
-            display: flex; justify-content: space-between;
-            margin-top: 4px; font-size: 12px; color: #666;
-        }
+        /* VU */
+        .vu-container { height: 32px; background: #0f3460; border-radius: 6px; overflow: hidden; position: relative; }
+        .vu-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #4ecca3, #f0a500, #e23e57); transition: width 0.1s; border-radius: 6px; }
+        .vu-threshold { position: absolute; top: 0; height: 100%; width: 2px; background: #fff; opacity: 0.6; }
+        .vu-labels { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #666; }
 
         /* Sliders */
-        .slider-row {
-            display: flex; align-items: center;
-            gap: 12px; margin-top: 10px;
-        }
+        .slider-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
         .slider-row label { font-size: 13px; color: #888; min-width: 80px; }
-        .slider-row input[type="range"] {
-            flex: 1; -webkit-appearance: none;
-            height: 8px; border-radius: 4px;
-            background: #0f3460; outline: none;
-        }
-        .slider-row input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 20px; height: 20px;
-            border-radius: 50%; background: #4ecca3; cursor: pointer;
-        }
+        .slider-row input[type="range"] { flex: 1; -webkit-appearance: none; height: 8px; border-radius: 4px; background: #0f3460; outline: none; }
+        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #4ecca3; cursor: pointer; }
         .slider-value { min-width: 40px; text-align: right; font-weight: bold; font-size: 14px; }
 
         /* Volume */
         .volume-row { display: flex; align-items: center; gap: 12px; }
-        .volume-slider {
-            flex: 1; -webkit-appearance: none;
-            height: 8px; border-radius: 4px; background: #0f3460; outline: none;
-        }
-        .volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 20px; height: 20px;
-            border-radius: 50%; background: #4ecca3; cursor: pointer;
-        }
+        .volume-slider { flex: 1; -webkit-appearance: none; height: 8px; border-radius: 4px; background: #0f3460; outline: none; }
+        .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #4ecca3; cursor: pointer; }
         .volume-value { min-width: 40px; text-align: right; font-weight: bold; }
 
         /* History */
         .history-list { max-height: 300px; overflow-y: auto; }
-        .history-item {
-            display: flex; justify-content: space-between;
-            padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 14px;
-        }
+        .history-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 14px; }
         .history-item:last-child { border-bottom: none; }
         .history-time { color: #888; }
         .history-rms { color: #e23e57; font-weight: bold; }
@@ -133,128 +100,88 @@
         .history-muted { opacity: 0.5; }
 
         /* Sound select */
-        .sound-select {
-            width: 100%; padding: 10px;
-            border: 1px solid #0f3460; border-radius: 6px;
-            background: #1a1a2e; color: #eee; font-size: 16px;
-        }
+        .sound-select { width: 100%; padding: 10px; border: 1px solid #0f3460; border-radius: 6px; background: #1a1a2e; color: #eee; font-size: 16px; }
 
         /* Buttons */
-        .btn {
-            padding: 10px 24px; border: none;
-            border-radius: 6px; font-size: 14px;
-            cursor: pointer; font-weight: bold;
-        }
+        .btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold; }
         .btn-reset { background: #0f3460; color: #888; margin-top: 12px; }
         .btn-reset:hover { background: #1a4a8a; color: #eee; }
         .btn-secondary { background: #0f3460; color: #eee; }
         .btn-secondary:hover { background: #1a4a8a; }
-        .save-feedback {
-            display: inline-block; margin-left: 12px;
-            color: #4ecca3; font-size: 14px;
-            opacity: 0; transition: opacity 0.3s;
-        }
+        .save-feedback { display: inline-block; margin-left: 12px; color: #4ecca3; font-size: 14px; opacity: 0; transition: opacity 0.3s; }
 
         /* Toggle switch */
-        .toggle-switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
         .switch-track {
             width: 48px; height: 26px; background: #0f3460;
             border-radius: 13px; position: relative;
-            transition: background 0.3s; cursor: pointer;
+            transition: background 0.3s; cursor: pointer; flex-shrink: 0;
         }
         .switch-track::after {
-            content: ''; position: absolute;
-            width: 20px; height: 20px;
-            background: #888; border-radius: 50%;
-            top: 3px; left: 3px;
+            content: ''; position: absolute; width: 20px; height: 20px;
+            background: #888; border-radius: 50%; top: 3px; left: 3px;
             transition: transform 0.3s, background 0.3s;
         }
         .switch-track.on { background: #1a4a8a; }
         .switch-track.on::after { transform: translateX(22px); background: #4ecca3; }
-        .switch-label { font-size: 14px; color: #888; }
 
         /* Time inputs */
-        .time-input {
-            background: #0f3460; border: 1px solid #1a4a8a;
-            border-radius: 6px; color: #eee; padding: 8px 10px;
-            font-size: 14px; width: 100%; outline: none;
-        }
+        .time-input { background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #eee; padding: 8px 10px; font-size: 14px; width: 100%; outline: none; }
         .time-row { display: flex; gap: 12px; margin-top: 12px; }
         .time-col { flex: 1; }
         .time-col label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
 
         /* Stat boxes */
         .stat-boxes { display: flex; gap: 12px; margin-bottom: 16px; }
-        .stat-box {
-            flex: 1; background: #0f3460; border-radius: 8px;
-            padding: 12px; text-align: center;
-        }
+        .stat-box { flex: 1; background: #0f3460; border-radius: 8px; padding: 12px; text-align: center; }
         .stat-value { font-size: 28px; font-weight: bold; color: #4ecca3; }
         .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
-
-        /* Chart */
         .chart-title { font-size: 12px; color: #888; margin-bottom: 8px; margin-top: 16px; }
 
         /* Recordings */
-        .recording-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 13px;
-        }
+        .recording-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 13px; }
         .recording-item:last-child { border-bottom: none; }
         .recording-name { color: #888; flex: 1; }
         .recording-size { color: #666; margin: 0 12px; font-size: 12px; }
         .recording-actions { display: flex; gap: 6px; }
-        .btn-tiny {
-            padding: 4px 10px; border: none; border-radius: 4px;
-            font-size: 12px; cursor: pointer; font-weight: bold;
-        }
+        .btn-tiny { padding: 4px 10px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
         .btn-play { background: #0f3460; color: #4ecca3; }
         .btn-play:hover { background: #1a4a8a; }
         .btn-del { background: #3d1a1a; color: #e23e57; }
         .btn-del:hover { background: #5d2a2a; }
 
-        /* Limit indicator */
-        .limit-bar-wrap {
-            background: #0f3460; border-radius: 4px;
-            height: 6px; margin-top: 8px; overflow: hidden;
-        }
+        /* Limit bar */
+        .limit-bar-wrap { background: #0f3460; border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
         .limit-bar { height: 100%; background: #4ecca3; border-radius: 4px; transition: width 0.3s; }
 
-        /* Night mode badge */
-        .night-badge {
-            display: inline-block; background: #1a3060;
-            color: #4ecca3; font-size: 11px; padding: 2px 8px;
-            border-radius: 10px; margin-left: 8px; vertical-align: middle;
-        }
+        /* Night badge */
+        .night-badge { display: inline-block; background: #1a3060; color: #4ecca3; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
 
         /* Calibration */
         .calibrate-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-        .calibrate-progress {
-            flex: 1; height: 4px; background: #0f3460;
-            border-radius: 2px; overflow: hidden; display: none;
-        }
-        .calibrate-bar {
-            height: 100%; background: #4ecca3; width: 0%;
-            transition: width 0.1s linear;
-        }
+        .calibrate-progress { flex: 1; height: 4px; background: #0f3460; border-radius: 2px; overflow: hidden; display: none; }
+        .calibrate-bar { height: 100%; background: #4ecca3; width: 0%; transition: width 0.1s linear; }
+
+        /* Row utils */
+        .row-between { display: flex; align-items: center; justify-content: space-between; }
 
         @media (max-width: 600px) {
             .status-row { flex-direction: column; gap: 16px; text-align: center; }
             .slider-row label { min-width: 60px; }
             .stat-boxes { flex-wrap: wrap; }
-            .stat-box { min-width: 80px; }
         }
     </style>
 </head>
 <body>
+
 <div class="header">
     <h1>NoisyNeighbors</h1>
     <div class="subtitle">Noise Detection & Replay System</div>
 </div>
 
+<!-- TAB: LIVE -->
+<div class="tab-pane active" id="tab-live">
 <div class="container">
 
-    <!-- Status -->
     <div class="card">
         <h2>Status</h2>
         <div class="status-row">
@@ -271,7 +198,6 @@
         </div>
     </div>
 
-    <!-- Detection Level -->
     <div class="card">
         <h2>Detection Level</h2>
         <div class="vu-container">
@@ -297,7 +223,119 @@
         </div>
     </div>
 
-    <!-- Devices -->
+    <div class="card">
+        <h2>History</h2>
+        <div class="history-list" id="historyList">
+            <div class="history-empty">No detections yet</div>
+        </div>
+    </div>
+
+</div>
+</div>
+
+<!-- TAB: CONFIG -->
+<div class="tab-pane" id="tab-config">
+<div class="container">
+
+    <div class="card">
+        <h2>Response Sound</h2>
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+            <select class="sound-select" id="replayMode" onchange="setReplayMode(this.value)" style="flex: 1;"></select>
+            <button class="btn btn-secondary" style="white-space: nowrap;" onclick="testSound()">Test</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Night Mode</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Lower threshold and different sound during night hours</p>
+        <div class="row-between">
+            <span style="font-size: 14px; color: #888;">Enable night mode</span>
+            <div class="switch-track" id="nightModeTrack" onclick="toggleNightMode()"></div>
+        </div>
+        <div class="time-row">
+            <div class="time-col">
+                <label>Night starts</label>
+                <input type="time" class="time-input" id="nightStart" value="22:00" onchange="saveNightMode()">
+            </div>
+            <div class="time-col">
+                <label>Night ends</label>
+                <input type="time" class="time-input" id="nightEnd" value="08:00" onchange="saveNightMode()">
+            </div>
+        </div>
+        <div class="slider-row">
+            <label>Night threshold</label>
+            <input type="range" id="nightThreshold" min="0.01" max="1" step="0.01" value="0.10" oninput="document.getElementById('nightThresholdValue').textContent=parseFloat(this.value).toFixed(2)" onchange="saveNightMode()">
+            <span class="slider-value" id="nightThresholdValue">0.10</span>
+        </div>
+        <div style="margin-top: 12px;">
+            <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px;">Night response sound</label>
+            <select class="sound-select" id="nightReplayMode" onchange="saveNightMode()"></select>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Scheduler</h2>
+        <div class="row-between">
+            <span style="font-size: 14px; color: #888;">Auto-enable on schedule</span>
+            <div class="switch-track" id="scheduleTrack" onclick="toggleSchedule()"></div>
+        </div>
+        <div class="time-row">
+            <div class="time-col">
+                <label>Enable at</label>
+                <input type="time" class="time-input" id="scheduleStart" value="22:00" onchange="saveSchedule()">
+            </div>
+            <div class="time-col">
+                <label>Disable at</label>
+                <input type="time" class="time-input" id="scheduleEnd" value="08:00" onchange="saveSchedule()">
+            </div>
+        </div>
+        <div id="scheduleStatus" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+    </div>
+
+    <div class="card">
+        <h2>Rate Limiting</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Cap responses per hour to avoid an escalating cycle</p>
+        <div class="slider-row">
+            <label>Max/hour</label>
+            <input type="range" id="maxBoomsPerHour" min="0" max="50" step="1" value="0" oninput="updateMaxBooms(this.value)" onchange="saveLimits()">
+            <span class="slider-value" id="maxBoomsValue">&#8734;</span>
+        </div>
+        <div style="margin-top: 10px; font-size: 12px; color: #666;">
+            This hour: <span id="hourlyCount">0</span><span id="hourlyLimitText"></span>
+        </div>
+        <div class="limit-bar-wrap" id="limitBarWrap" style="display: none;">
+            <div class="limit-bar" id="limitBar" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Settings</h2>
+        <div class="slider-row">
+            <label>Cooldown</label>
+            <input type="range" id="cooldown_seconds" min="0" max="30" step="1" value="5">
+            <span class="slider-value" id="cooldownValue">5s</span>
+        </div>
+        <div class="slider-row">
+            <label>Pre-boom</label>
+            <input type="range" id="pre_boom_seconds" min="0.1" max="5" step="0.1" value="1.0">
+            <span class="slider-value" id="preBoomValue">1.0s</span>
+        </div>
+        <div class="slider-row">
+            <label>Post-boom</label>
+            <input type="range" id="post_boom_seconds" min="0.1" max="5" step="0.1" value="1.5">
+            <span class="slider-value" id="postBoomValue">1.5s</span>
+        </div>
+        <button class="btn btn-reset" onclick="resetDefaults()">Reset Defaults</button>
+        <span class="save-feedback" id="saveFeedback">Saved!</span>
+    </div>
+
+</div>
+</div>
+
+<!-- TAB: DEVICES -->
+<div class="tab-pane" id="tab-devices">
+<div class="container">
+
     <div class="card">
         <h2>Devices</h2>
         <div style="margin-bottom: 10px;">
@@ -318,16 +356,6 @@
         </div>
     </div>
 
-    <!-- Response Sound -->
-    <div class="card">
-        <h2>Response Sound</h2>
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
-            <select class="sound-select" id="replayMode" onchange="setReplayMode(this.value)" style="flex: 1;"></select>
-            <button class="btn btn-secondary" style="white-space: nowrap;" onclick="testSound()">Test</button>
-        </div>
-    </div>
-
-    <!-- PS4 Controller -->
     <div class="card">
         <h2>PS4 Controller</h2>
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -350,100 +378,13 @@
         </div>
     </div>
 
-    <!-- Scheduler -->
-    <div class="card">
-        <h2>Scheduler</h2>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span style="font-size: 14px; color: #888;">Auto-enable on schedule</span>
-            <div class="toggle-switch" onclick="toggleSchedule()">
-                <div class="switch-track" id="scheduleTrack"></div>
-            </div>
-        </div>
-        <div class="time-row">
-            <div class="time-col">
-                <label>Enable at</label>
-                <input type="time" class="time-input" id="scheduleStart" value="22:00" onchange="saveSchedule()">
-            </div>
-            <div class="time-col">
-                <label>Disable at</label>
-                <input type="time" class="time-input" id="scheduleEnd" value="08:00" onchange="saveSchedule()">
-            </div>
-        </div>
-        <div id="scheduleStatus" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
-    </div>
+</div>
+</div>
 
-    <!-- Night Mode -->
-    <div class="card">
-        <h2>Night Mode</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Different settings during night hours (lower threshold, different sound)</p>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <span style="font-size: 14px; color: #888;">Enable night mode</span>
-            <div class="toggle-switch" onclick="toggleNightMode()">
-                <div class="switch-track" id="nightModeTrack"></div>
-            </div>
-        </div>
-        <div class="time-row">
-            <div class="time-col">
-                <label>Night starts</label>
-                <input type="time" class="time-input" id="nightStart" value="22:00" onchange="saveNightMode()">
-            </div>
-            <div class="time-col">
-                <label>Night ends</label>
-                <input type="time" class="time-input" id="nightEnd" value="08:00" onchange="saveNightMode()">
-            </div>
-        </div>
-        <div class="slider-row">
-            <label>Night threshold</label>
-            <input type="range" id="nightThreshold" min="0.01" max="1" step="0.01" value="0.10" onchange="saveNightMode()">
-            <span class="slider-value" id="nightThresholdValue">0.10</span>
-        </div>
-        <div style="margin-top: 12px;">
-            <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px;">Night response sound</label>
-            <select class="sound-select" id="nightReplayMode" onchange="saveNightMode()"></select>
-        </div>
-    </div>
+<!-- TAB: STATS -->
+<div class="tab-pane" id="tab-stats">
+<div class="container">
 
-    <!-- Settings -->
-    <div class="card">
-        <h2>Settings</h2>
-        <div class="slider-row">
-            <label>Cooldown</label>
-            <input type="range" id="cooldown_seconds" min="0" max="30" step="1" value="5">
-            <span class="slider-value" id="cooldownValue">5s</span>
-        </div>
-        <div class="slider-row">
-            <label>Pre-boom</label>
-            <input type="range" id="pre_boom_seconds" min="0.1" max="5" step="0.1" value="1.0">
-            <span class="slider-value" id="preBoomValue">1.0s</span>
-        </div>
-        <div class="slider-row">
-            <label>Post-boom</label>
-            <input type="range" id="post_boom_seconds" min="0.1" max="5" step="0.1" value="1.5">
-            <span class="slider-value" id="postBoomValue">1.5s</span>
-        </div>
-        <button class="btn btn-reset" onclick="resetDefaults()">Reset Defaults</button>
-        <span class="save-feedback" id="saveFeedback">Saved!</span>
-    </div>
-
-    <!-- Rate Limiting -->
-    <div class="card">
-        <h2>Rate Limiting</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Cap the number of responses per hour to avoid an escalating cycle</p>
-        <div class="slider-row">
-            <label>Max/hour</label>
-            <input type="range" id="maxBoomsPerHour" min="0" max="50" step="1" value="0" oninput="updateMaxBooms(this.value)" onchange="saveLimits()">
-            <span class="slider-value" id="maxBoomsValue">&#8734;</span>
-        </div>
-        <div style="margin-top: 10px; font-size: 12px; color: #666;">
-            This hour: <span id="hourlyCount">0</span>
-            <span id="hourlyLimitText"></span>
-        </div>
-        <div class="limit-bar-wrap" id="limitBarWrap" style="display: none;">
-            <div class="limit-bar" id="limitBar" style="width: 0%"></div>
-        </div>
-    </div>
-
-    <!-- Statistics -->
     <div class="card">
         <h2>Statistics</h2>
         <div class="stat-boxes">
@@ -466,22 +407,11 @@
         <canvas id="dailyChart" height="80"></canvas>
     </div>
 
-    <!-- History -->
-    <div class="card">
-        <h2>History</h2>
-        <div class="history-list" id="historyList">
-            <div class="history-empty">No detections yet</div>
-        </div>
-    </div>
-
-    <!-- Recordings -->
     <div class="card">
         <h2>Recordings</h2>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div class="row-between" style="margin-bottom: 12px;">
             <span style="font-size: 14px; color: #888;">Save boom audio clips</span>
-            <div class="toggle-switch" onclick="toggleSaveRecordings()">
-                <div class="switch-track" id="saveRecordingsTrack"></div>
-            </div>
+            <div class="switch-track" id="saveRecordingsTrack" onclick="toggleSaveRecordings()"></div>
         </div>
         <div id="recordingsList">
             <div class="history-empty">No recordings yet</div>
@@ -490,6 +420,23 @@
     </div>
 
 </div>
+</div>
+
+<!-- Bottom tab navigation -->
+<nav class="tab-nav">
+    <button class="tab-btn active" id="btn-live" onclick="switchTab('live')">
+        <span class="tab-icon">📡</span>Live
+    </button>
+    <button class="tab-btn" id="btn-config" onclick="switchTab('config')">
+        <span class="tab-icon">⚙️</span>Config
+    </button>
+    <button class="tab-btn" id="btn-devices" onclick="switchTab('devices')">
+        <span class="tab-icon">🎤</span>Devices
+    </button>
+    <button class="tab-btn" id="btn-stats" onclick="switchTab('stats')">
+        <span class="tab-icon">📊</span>Stats
+    </button>
+</nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -501,47 +448,63 @@ let nightModeEnabled = false;
 let saveRecordingsEnabled = false;
 let maxBoomsPerHour = 0;
 let hourlyCount = 0;
+let chartsReady = false;
 let hourlyChart, dailyChart;
 
-// ---- Chart.js setup ----
-const chartDefaults = {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-        y: {
-            beginAtZero: true, ticks: { color: '#888', stepSize: 1 },
-            grid: { color: '#0f3460' }
-        },
-        x: { ticks: { color: '#888', maxRotation: 45 }, grid: { color: '#0f3460' } }
+// ---- Tab navigation ----
+function switchTab(name) {
+    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('btn-' + name).classList.add('active');
+    localStorage.setItem('activeTab', name);
+    if (name === 'stats' && !chartsReady) {
+        initCharts();
+        socket.emit('get_stats');
     }
-};
+    if (name === 'stats') setTimeout(function() { if (hourlyChart) hourlyChart.resize(); if (dailyChart) dailyChart.resize(); }, 50);
+}
 
+// Restore last tab
+(function() {
+    var t = localStorage.getItem('activeTab') || 'live';
+    switchTab(t);
+})();
+
+// ---- Charts ----
 function initCharts() {
+    chartsReady = true;
+    var opts = {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: true, ticks: { color: '#888', stepSize: 1 }, grid: { color: '#0f3460' } },
+            x: { ticks: { color: '#888', maxRotation: 45, font: { size: 10 } }, grid: { color: '#0f3460' } }
+        }
+    };
     hourlyChart = new Chart(document.getElementById('hourlyChart'), {
         type: 'bar',
         data: { labels: [], datasets: [{ data: [], backgroundColor: '#e23e57', borderRadius: 3 }] },
-        options: { ...chartDefaults }
+        options: JSON.parse(JSON.stringify(opts))
     });
     dailyChart = new Chart(document.getElementById('dailyChart'), {
         type: 'bar',
         data: { labels: [], datasets: [{ data: [], backgroundColor: '#4ecca3', borderRadius: 3 }] },
-        options: { ...chartDefaults }
+        options: JSON.parse(JSON.stringify(opts))
     });
 }
-initCharts();
 
 // ---- Threshold ----
 function updateThresholdLine() {
     document.getElementById('vuThreshold').style.left = (threshold * 100) + '%';
 }
 
-var thresholdSlider = document.getElementById('threshold');
-thresholdSlider.addEventListener('input', function() {
+document.getElementById('threshold').addEventListener('input', function() {
     threshold = parseFloat(this.value);
     document.getElementById('thresholdValue').textContent = threshold.toFixed(2);
     updateThresholdLine();
 });
-thresholdSlider.addEventListener('change', function() { saveSettings(); });
+document.getElementById('threshold').addEventListener('change', function() { saveSettings(); });
 
 // ---- Calibration ----
 function startCalibration() {
@@ -550,24 +513,15 @@ function startCalibration() {
     document.getElementById('calibrateFeedback').textContent = 'Measuring...';
     document.getElementById('calibrateProgress').style.display = 'block';
     var bar = document.getElementById('calibrateBar');
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
-    setTimeout(function() {
-        bar.style.transition = 'width 5s linear';
-        bar.style.width = '100%';
-    }, 50);
+    bar.style.transition = 'none'; bar.style.width = '0%';
+    setTimeout(function() { bar.style.transition = 'width 5s linear'; bar.style.width = '100%'; }, 50);
 }
-
-socket.on('calibration_started', function() {});
 
 socket.on('calibration_done', function(data) {
     document.getElementById('calibrateBtn').disabled = false;
     document.getElementById('calibrateProgress').style.display = 'none';
     document.getElementById('calibrateBar').style.width = '0%';
-    if (data.error) {
-        document.getElementById('calibrateFeedback').textContent = 'Error: ' + data.error;
-        return;
-    }
+    if (data.error) { document.getElementById('calibrateFeedback').textContent = 'Error: ' + data.error; return; }
     threshold = data.threshold;
     document.getElementById('threshold').value = threshold;
     document.getElementById('thresholdValue').textContent = threshold.toFixed(4);
@@ -589,29 +543,17 @@ function saveSettings() {
     var pre = parseFloat(document.getElementById('pre_boom_seconds').value);
     var post = parseFloat(document.getElementById('post_boom_seconds').value);
     if (isNaN(t) || isNaN(cd) || isNaN(pre) || isNaN(post)) return;
-    threshold = t;
-    updateThresholdLine();
+    threshold = t; updateThresholdLine();
     socket.emit('save_config', { threshold: t, cooldown_seconds: cd, pre_boom_seconds: pre, post_boom_seconds: post });
     showSaved();
 }
 
-var cooldownSlider = document.getElementById('cooldown_seconds');
-cooldownSlider.addEventListener('input', function() {
-    document.getElementById('cooldownValue').textContent = this.value + 's';
-});
-cooldownSlider.addEventListener('change', function() { saveSettings(); });
-
-var preBoomSlider = document.getElementById('pre_boom_seconds');
-preBoomSlider.addEventListener('input', function() {
-    document.getElementById('preBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's';
-});
-preBoomSlider.addEventListener('change', function() { saveSettings(); });
-
-var postBoomSlider = document.getElementById('post_boom_seconds');
-postBoomSlider.addEventListener('input', function() {
-    document.getElementById('postBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's';
-});
-postBoomSlider.addEventListener('change', function() { saveSettings(); });
+document.getElementById('cooldown_seconds').addEventListener('input', function() { document.getElementById('cooldownValue').textContent = this.value + 's'; });
+document.getElementById('cooldown_seconds').addEventListener('change', saveSettings);
+document.getElementById('pre_boom_seconds').addEventListener('input', function() { document.getElementById('preBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's'; });
+document.getElementById('pre_boom_seconds').addEventListener('change', saveSettings);
+document.getElementById('post_boom_seconds').addEventListener('input', function() { document.getElementById('postBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's'; });
+document.getElementById('post_boom_seconds').addEventListener('change', saveSettings);
 
 function resetDefaults() {
     document.getElementById('threshold').value = 0.15;
@@ -622,9 +564,7 @@ function resetDefaults() {
     document.getElementById('preBoomValue').textContent = '1.0s';
     document.getElementById('post_boom_seconds').value = 1.5;
     document.getElementById('postBoomValue').textContent = '1.5s';
-    threshold = 0.15;
-    updateThresholdLine();
-    saveSettings();
+    threshold = 0.15; updateThresholdLine(); saveSettings();
 }
 
 // ---- RMS / Status ----
@@ -638,15 +578,10 @@ socket.on('status', function(data) {
     var dot = document.getElementById('statusDot');
     var text = document.getElementById('statusText');
     dot.className = 'status-dot';
-    if (data.state === 'disabled') {
-        dot.classList.add('disabled'); text.textContent = 'Disabled';
-    } else if (data.state === 'boom') {
-        dot.classList.add('boom'); text.textContent = 'BOOM detected!';
-    } else if (data.state === 'cooldown') {
-        dot.classList.add('cooldown'); text.textContent = 'Cooldown...';
-    } else {
-        text.textContent = 'Listening...';
-    }
+    if (data.state === 'disabled') { dot.classList.add('disabled'); text.textContent = 'Disabled'; }
+    else if (data.state === 'boom') { dot.classList.add('boom'); text.textContent = 'BOOM detected!'; }
+    else if (data.state === 'cooldown') { dot.classList.add('cooldown'); text.textContent = 'Cooldown...'; }
+    else { text.textContent = 'Listening...'; }
     updateNightBadge();
 });
 
@@ -665,20 +600,13 @@ function updateNightBadge() {
 // ---- Enable/Disable ----
 socket.on('enabled_state', function(data) {
     var btn = document.getElementById('toggleBtn');
-    if (data.enabled) {
-        btn.className = 'toggle-btn on'; btn.textContent = 'Disable';
-    } else {
-        btn.className = 'toggle-btn off'; btn.textContent = 'Enable';
-    }
+    if (data.enabled) { btn.className = 'toggle-btn on'; btn.textContent = 'Disable'; }
+    else { btn.className = 'toggle-btn off'; btn.textContent = 'Enable'; }
 });
-
 function toggleEnabled() { socket.emit('toggle_enabled'); }
 
 // ---- Replay mode ----
-var soundLabels = {
-    echo: 'Echo (replay the boom)', alarm: 'Alarm', doorbell: 'Doorbell',
-    hammer: 'Hammer', honk: 'Honk', siren: 'Siren',
-};
+var soundLabels = { echo: 'Echo (replay the boom)', alarm: 'Alarm', doorbell: 'Doorbell', hammer: 'Hammer', honk: 'Honk', siren: 'Siren' };
 
 socket.on('replay_mode', function(data) {
     ['replayMode', 'nightReplayMode'].forEach(function(id) {
@@ -687,8 +615,7 @@ socket.on('replay_mode', function(data) {
         sel.innerHTML = '';
         data.available.forEach(function(s) {
             var opt = document.createElement('option');
-            opt.value = s;
-            opt.textContent = soundLabels[s] || s;
+            opt.value = s; opt.textContent = soundLabels[s] || s;
             if ((id === 'replayMode' && s === data.mode) || (id !== 'replayMode' && s === cur)) opt.selected = true;
             sel.appendChild(opt);
         });
@@ -708,21 +635,12 @@ socket.on('ps4_status', function(data) {
     document.getElementById('vibrationIntensity').value = data.intensity;
     document.getElementById('vibrationValue').textContent = data.intensity + '%';
 });
-
 function togglePs4(enabled) {
     socket.emit('toggle_ps4_vibration', { enabled: enabled });
     document.getElementById('vibrationRow').style.display = enabled ? 'flex' : 'none';
-    showSaved();
 }
-
-var vibrationSlider = document.getElementById('vibrationIntensity');
-vibrationSlider.addEventListener('input', function() {
-    document.getElementById('vibrationValue').textContent = this.value + '%';
-});
-vibrationSlider.addEventListener('change', function() {
-    socket.emit('set_vibration_intensity', { intensity: parseInt(this.value) });
-    showSaved();
-});
+document.getElementById('vibrationIntensity').addEventListener('input', function() { document.getElementById('vibrationValue').textContent = this.value + '%'; });
+document.getElementById('vibrationIntensity').addEventListener('change', function() { socket.emit('set_vibration_intensity', { intensity: parseInt(this.value) }); });
 
 // ---- Devices ----
 socket.on('input_devices', function(data) {
@@ -730,13 +648,11 @@ socket.on('input_devices', function(data) {
     sel.innerHTML = '';
     data.devices.forEach(function(d) {
         var opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.name;
+        opt.value = d.id; opt.textContent = d.name;
         if (d.id === data.current) opt.selected = true;
         sel.appendChild(opt);
     });
 });
-
 function setInputDevice(device) { socket.emit('set_input_device', { device: parseInt(device) }); }
 
 socket.on('alsa_devices', function(data) {
@@ -744,112 +660,80 @@ socket.on('alsa_devices', function(data) {
     sel.innerHTML = '';
     data.devices.forEach(function(d) {
         var opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.name + ' (' + d.id + ')';
+        opt.value = d.id; opt.textContent = d.name + ' (' + d.id + ')';
         if (d.id === data.current) opt.selected = true;
         sel.appendChild(opt);
     });
 });
-
 function setAlsaDevice(device) { socket.emit('set_alsa_device', { device: device }); }
 
-var volumeSlider = document.getElementById('volumeSlider');
-volumeSlider.addEventListener('input', function() {
+document.getElementById('volumeSlider').addEventListener('input', function() {
     document.getElementById('volumeValue').textContent = this.value;
     socket.emit('set_volume', { level: parseInt(this.value) });
 });
-
 socket.on('volume', function(data) {
-    volumeSlider.value = data.level;
-    volumeSlider.max = data.max;
+    document.getElementById('volumeSlider').value = data.level;
+    document.getElementById('volumeSlider').max = data.max;
     document.getElementById('volumeValue').textContent = data.level;
 });
 
-// ---- Scheduler ----
+// ---- Toggle switch helper ----
 function setTrack(id, on) {
     var t = document.getElementById(id);
     if (on) t.classList.add('on'); else t.classList.remove('on');
 }
 
-function toggleSchedule() {
-    scheduleEnabled = !scheduleEnabled;
-    setTrack('scheduleTrack', scheduleEnabled);
-    saveSchedule();
-}
-
+// ---- Scheduler ----
+function toggleSchedule() { scheduleEnabled = !scheduleEnabled; setTrack('scheduleTrack', scheduleEnabled); saveSchedule(); }
 function saveSchedule() {
-    var start = document.getElementById('scheduleStart').value;
-    var end = document.getElementById('scheduleEnd').value;
-    socket.emit('save_schedule', { enabled: scheduleEnabled, start: start, end: end });
-    updateScheduleStatus();
-}
-
-function updateScheduleStatus() {
-    var el = document.getElementById('scheduleStatus');
-    if (!scheduleEnabled) { el.textContent = ''; return; }
-    var start = document.getElementById('scheduleStart').value;
-    var end = document.getElementById('scheduleEnd').value;
-    el.textContent = 'Active: ' + start + ' → ' + end + ' (checks every 30s)';
+    socket.emit('save_schedule', { enabled: scheduleEnabled, start: document.getElementById('scheduleStart').value, end: document.getElementById('scheduleEnd').value });
+    document.getElementById('scheduleStatus').textContent = scheduleEnabled
+        ? 'Active: ' + document.getElementById('scheduleStart').value + ' → ' + document.getElementById('scheduleEnd').value + ' (checks every 30s)'
+        : '';
 }
 
 // ---- Night Mode ----
-function toggleNightMode() {
-    nightModeEnabled = !nightModeEnabled;
-    setTrack('nightModeTrack', nightModeEnabled);
-    saveNightMode();
-    updateNightBadge();
-}
-
+function toggleNightMode() { nightModeEnabled = !nightModeEnabled; setTrack('nightModeTrack', nightModeEnabled); saveNightMode(); updateNightBadge(); }
 function saveNightMode() {
-    var start = document.getElementById('nightStart').value;
-    var end = document.getElementById('nightEnd').value;
-    var t = parseFloat(document.getElementById('nightThreshold').value);
-    var mode = document.getElementById('nightReplayMode').value;
-    socket.emit('save_night_mode', { enabled: nightModeEnabled, start: start, end: end, threshold: t, replay_mode: mode });
+    socket.emit('save_night_mode', {
+        enabled: nightModeEnabled,
+        start: document.getElementById('nightStart').value,
+        end: document.getElementById('nightEnd').value,
+        threshold: parseFloat(document.getElementById('nightThreshold').value),
+        replay_mode: document.getElementById('nightReplayMode').value,
+    });
 }
-
-document.getElementById('nightThreshold').addEventListener('input', function() {
-    document.getElementById('nightThresholdValue').textContent = parseFloat(this.value).toFixed(2);
-});
 
 // ---- Rate Limiting ----
 function updateMaxBooms(val) {
     maxBoomsPerHour = parseInt(val);
     document.getElementById('maxBoomsValue').textContent = maxBoomsPerHour === 0 ? '∞' : val;
-    var wrap = document.getElementById('limitBarWrap');
-    wrap.style.display = maxBoomsPerHour > 0 ? 'block' : 'none';
+    document.getElementById('limitBarWrap').style.display = maxBoomsPerHour > 0 ? 'block' : 'none';
+    document.getElementById('hourlyLimitText').textContent = maxBoomsPerHour > 0 ? ' / ' + maxBoomsPerHour : '';
     updateLimitBar();
 }
-
 function updateLimitBar() {
     if (maxBoomsPerHour === 0) return;
     var pct = Math.min(100, (hourlyCount / maxBoomsPerHour) * 100);
     var bar = document.getElementById('limitBar');
     bar.style.width = pct + '%';
     bar.style.background = pct >= 100 ? '#e23e57' : pct >= 75 ? '#f0a500' : '#4ecca3';
-    document.getElementById('hourlyLimitText').textContent = ' / ' + maxBoomsPerHour;
 }
+function saveLimits() { socket.emit('save_limits', { max_booms_per_hour: maxBoomsPerHour }); }
 
-function saveLimits() {
-    socket.emit('save_limits', { max_booms_per_hour: maxBoomsPerHour });
-}
-
-// ---- Statistics ----
+// ---- Stats ----
 socket.on('stats', function(data) {
     document.getElementById('statToday').textContent = data.today;
     document.getElementById('statWeek').textContent = data.week;
     document.getElementById('statTotal').textContent = data.total;
-
+    if (!chartsReady) return;
     hourlyChart.data.labels = data.hourly.labels;
     hourlyChart.data.datasets[0].data = data.hourly.data;
     hourlyChart.update();
-
     dailyChart.data.labels = data.daily.labels;
     dailyChart.data.datasets[0].data = data.daily.data;
     dailyChart.update();
 });
-
-// Refresh stats every 60s
 setInterval(function() { socket.emit('get_stats'); }, 60000);
 
 // ---- Boom events ----
@@ -865,9 +749,7 @@ socket.on('boom', function(data) {
     var item = document.createElement('div');
     item.className = 'history-item' + (data.limit_reached ? ' history-muted' : '');
     var muted = data.limit_reached ? ' <span style="color:#f0a500;font-size:11px;">[muted]</span>' : '';
-    item.innerHTML = '<span class="history-time">' + data.time + '</span>' +
-        '<span>Duration: ' + data.duration.toFixed(1) + 's</span>' +
-        '<span class="history-rms">RMS: ' + data.rms.toFixed(4) + '</span>' + muted;
+    item.innerHTML = '<span class="history-time">' + data.time + '</span><span>' + data.duration.toFixed(1) + 's</span><span class="history-rms">' + data.rms.toFixed(4) + '</span>' + muted;
     list.insertBefore(item, list.firstChild);
     while (list.children.length > 50) list.removeChild(list.lastChild);
 });
@@ -887,43 +769,36 @@ socket.on('config', function(data) {
 });
 
 socket.on('extended_config', function(data) {
-    // Scheduler
     scheduleEnabled = data.schedule_enabled;
     setTrack('scheduleTrack', scheduleEnabled);
     document.getElementById('scheduleStart').value = data.schedule_start;
     document.getElementById('scheduleEnd').value = data.schedule_end;
-    updateScheduleStatus();
+    document.getElementById('scheduleStatus').textContent = scheduleEnabled
+        ? 'Active: ' + data.schedule_start + ' → ' + data.schedule_end + ' (checks every 30s)' : '';
 
-    // Night mode
     nightModeEnabled = data.night_mode_enabled;
     setTrack('nightModeTrack', nightModeEnabled);
     document.getElementById('nightStart').value = data.night_mode_start;
     document.getElementById('nightEnd').value = data.night_mode_end;
     document.getElementById('nightThreshold').value = data.night_threshold;
     document.getElementById('nightThresholdValue').textContent = parseFloat(data.night_threshold).toFixed(2);
-    // Night replay mode will be set when replay_mode event fires
     setTimeout(function() {
         var sel = document.getElementById('nightReplayMode');
         for (var i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === data.night_replay_mode) {
-                sel.selectedIndex = i; break;
-            }
+            if (sel.options[i].value === data.night_replay_mode) { sel.selectedIndex = i; break; }
         }
     }, 200);
     updateNightBadge();
 
-    // Rate limiting
     maxBoomsPerHour = data.max_booms_per_hour;
     document.getElementById('maxBoomsPerHour').value = maxBoomsPerHour;
     updateMaxBooms(maxBoomsPerHour);
 
-    // Recordings
     saveRecordingsEnabled = data.save_recordings;
     setTrack('saveRecordingsTrack', saveRecordingsEnabled);
     if (saveRecordingsEnabled) loadRecordings();
 });
 
-// ---- History ----
 socket.on('history', function(data) {
     var list = document.getElementById('historyList');
     if (data.items.length === 0) return;
@@ -932,9 +807,7 @@ socket.on('history', function(data) {
     data.items.forEach(function(item) {
         var el = document.createElement('div');
         el.className = 'history-item';
-        el.innerHTML = '<span class="history-time">' + item.time + '</span>' +
-            '<span>Duration: ' + item.duration.toFixed(1) + 's</span>' +
-            '<span class="history-rms">RMS: ' + item.rms.toFixed(4) + '</span>';
+        el.innerHTML = '<span class="history-time">' + item.time + '</span><span>' + item.duration.toFixed(1) + 's</span><span class="history-rms">' + item.rms.toFixed(4) + '</span>';
         list.appendChild(el);
     });
 });
@@ -950,21 +823,16 @@ function toggleSaveRecordings() {
 function loadRecordings() {
     fetch('/recordings-list').then(function(r) { return r.json(); }).then(function(files) {
         var list = document.getElementById('recordingsList');
-        if (files.length === 0) {
-            list.innerHTML = '<div class="history-empty">No recordings yet</div>';
-            return;
-        }
+        if (files.length === 0) { list.innerHTML = '<div class="history-empty">No recordings yet</div>'; return; }
         list.innerHTML = '';
         files.forEach(function(f) {
             var el = document.createElement('div');
-            el.className = 'recording-item';
-            el.id = 'rec_' + f.name;
+            el.className = 'recording-item'; el.id = 'rec_' + f.name;
             var dt = formatRecordingName(f.name);
             var size = (f.size / 1024).toFixed(0) + ' KB';
-            el.innerHTML = '<span class="recording-name">' + dt + '</span>' +
-                '<span class="recording-size">' + size + '</span>' +
+            el.innerHTML = '<span class="recording-name">' + dt + '</span><span class="recording-size">' + size + '</span>' +
                 '<div class="recording-actions">' +
-                '<button class="btn-tiny btn-play" onclick="playRecording(\'' + f.name + '\')">&#9654; Play</button>' +
+                '<button class="btn-tiny btn-play" onclick="playRecording(\'' + f.name + '\')">&#9654;</button>' +
                 '<a href="/recordings/' + f.name + '" download class="btn-tiny btn-play" style="text-decoration:none;">&#8659;</a>' +
                 '<button class="btn-tiny btn-del" onclick="deleteRecording(\'' + f.name + '\')">&#215;</button>' +
                 '</div>';
@@ -987,9 +855,7 @@ function playRecording(name) {
     currentAudio.play();
 }
 
-function deleteRecording(name) {
-    socket.emit('delete_recording', { name: name });
-}
+function deleteRecording(name) { socket.emit('delete_recording', { name: name }); }
 
 socket.on('recording_deleted', function(data) {
     var el = document.getElementById('rec_' + data.name);
