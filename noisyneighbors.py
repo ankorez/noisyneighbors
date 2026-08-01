@@ -607,28 +607,39 @@ def set_bt_volume(level):
         subprocess.run(["pactl", "set-sink-volume", sink, f"{level}%"], capture_output=True, timeout=5)
 
 
+def get_alsa_volume_control(card):
+    """Find a usable playback volume control name for an ALSA card — varies per device."""
+    try:
+        r = subprocess.run(["amixer", "-c", card, "scontrols"], capture_output=True, text=True, timeout=5)
+        names = re.findall(r"'([^']+)'", r.stdout)
+        if not names:
+            return None
+        for preferred in ["Speaker", "Master", "PCM", "Headphone", "Playback"]:
+            for n in names:
+                if preferred.lower() in n.lower():
+                    return n
+        return names[0]
+    except Exception as e:
+        log.error("Error listing mixer controls for card %s: %s", card, e)
+        return None
+
+
 def get_volume():
+    """Return (level, max) on a 0-100 scale for whichever output is currently selected."""
     if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
         return get_bt_volume()
     card = get_alsa_card()
-    try:
-        result = subprocess.run(
-            ["amixer", "-c", card, "cget", "numid=3"],
-            capture_output=True, text=True
-        )
-        output = result.stdout
-        max_vol = 11
-        for line in output.split("\n"):
-            if "max=" in line:
-                for part in line.split(","):
-                    if part.strip().startswith("max="):
-                        max_vol = int(part.strip().split("=")[1])
-            if ": values=" in line:
-                level = int(line.strip().split("=")[1])
-                return level, max_vol
-    except Exception:
-        pass
-    return 11, 11
+    control = get_alsa_volume_control(card)
+    if control:
+        try:
+            r = subprocess.run(["amixer", "-c", card, "sget", control],
+                               capture_output=True, text=True, timeout=5)
+            m = re.search(r"\[(\d+)%\]", r.stdout)
+            if m:
+                return int(m.group(1)), 100
+        except Exception as e:
+            log.error("Error reading volume for card %s: %s", card, e)
+    return 100, 100
 
 
 def set_volume(level):
@@ -636,10 +647,9 @@ def set_volume(level):
         set_bt_volume(level)
         return
     card = get_alsa_card()
-    subprocess.run(
-        ["amixer", "-c", card, "cset", "numid=3", str(level)],
-        capture_output=True
-    )
+    control = get_alsa_volume_control(card)
+    if control:
+        subprocess.run(["amixer", "-c", card, "sset", control, f"{level}%"], capture_output=True, timeout=5)
 
 
 def compute_stats():
