@@ -608,9 +608,11 @@ def get_bt_volume():
 
 
 def set_bt_volume(level):
-    sink = get_bluetooth_sink()
-    if sink:
-        subprocess.run(["pactl", "set-sink-volume", sink, f"{level}%"], capture_output=True, timeout=5)
+    # Deliberately a no-op: pactl set-sink-volume sends a real AVRCP absolute-volume
+    # command to the speaker's own hardware, which was leaving some speakers desynced/
+    # muted. Bluetooth speaker volume is controlled on the speaker itself; the slider
+    # here only ever displays the speaker's actual current volume (see get_bt_volume).
+    pass
 
 
 def get_alsa_volume_control(card):
