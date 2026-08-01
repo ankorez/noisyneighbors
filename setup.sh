@@ -14,6 +14,9 @@ source venv/bin/activate
 echo "=== Installing Python dependencies ==="
 pip install -r requirements.txt
 
+echo "=== Setting up config.json ==="
+[ -f config.json ] || cp config.example.json config.json
+
 echo "=== Adding user to input group (for PS4 controller) ==="
 sudo usermod -aG input "$USER"
 

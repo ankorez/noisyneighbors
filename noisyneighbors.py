@@ -51,10 +51,16 @@ state = {
 }
 
 CONFIG_PATH = "config.json"
+CONFIG_EXAMPLE_PATH = "config.example.json"
 HISTORY_PATH = "history.json"
 
 
 def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        with open(CONFIG_EXAMPLE_PATH) as f:
+            defaults = json.load(f)
+        save_config(defaults)
+        return defaults
     with open(CONFIG_PATH) as f:
         return json.load(f)
 

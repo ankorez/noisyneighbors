@@ -74,7 +74,7 @@ The service starts automatically on boot.
 
 ## Configuration
 
-Edit `config.json` via the web dashboard (applied in real-time) or manually (requires a service restart):
+`config.json` is generated on first run from `config.example.json` (`setup.sh` does this automatically) and is **not tracked by git** — it's local runtime state (the app writes to it whenever you change something in the dashboard), so `git pull` never touches or conflicts with it. Edit it via the web dashboard (applied in real-time) or manually (requires a service restart):
 
 ```json
 {
