@@ -487,7 +487,7 @@ def play_audio(audio, sr, alsa_device, out_sr):
 
 
 SOUNDS_DIR = os.path.join(BASE_DIR, "sounds")
-AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren"]
+AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren", "sandstorm", "hammering"]
 
 # Prevent simultaneous aplay calls (USB device can't handle two streams at once)
 aplay_lock = threading.Lock()
