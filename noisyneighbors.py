@@ -820,15 +820,12 @@ def on_set_volume(data):
     log.info("Volume set to %d from dashboard", level)
     if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
         return
-    # Jabra SPEAK 410 briefly drops off ALSA after amixer, which resets its own volume —
-    # restart the InputStream to recapture the reconnected device, then report back
-    # whatever volume it actually settled on instead of fighting to force an exact value.
+    # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply
     def _restart_after_volume():
         time.sleep(2)
+        set_volume(level)  # re-apply: Jabra resets to lower volume after USB reconnect
+        log.info("Volume re-applied (%d) and audio restarting after device reconnect", level)
         state["restart_audio"] = True
-        log.info("Audio restarting after device reconnect")
-        time.sleep(2)
-        _emit_volume()
     threading.Thread(target=_restart_after_volume, daemon=True).start()
 
 
@@ -1051,11 +1048,6 @@ def _emit_output_devices():
     })
 
 
-def _emit_volume():
-    level, max_vol = get_volume()
-    socketio.emit("volume", {"level": level, "max": max_vol})
-
-
 @socketio.on("bt_scan")
 def on_bt_scan():
     def _scan():
@@ -1077,9 +1069,6 @@ def on_bt_pair(data):
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
-        if result["ok"]:
-            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
-            _emit_volume()
     threading.Thread(target=_pair, daemon=True).start()
 
 
@@ -1094,9 +1083,6 @@ def on_bt_connect(data):
         socketio.emit("bt_connect_result", result)
         socketio.emit("bt_status_result", get_bt_status())
         _emit_output_devices()
-        if result["ok"]:
-            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
-            _emit_volume()
     threading.Thread(target=_connect, daemon=True).start()
 
 
@@ -1109,7 +1095,6 @@ def on_bt_restart_adapter():
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
-        _emit_volume()
     threading.Thread(target=_restart, daemon=True).start()
 
 

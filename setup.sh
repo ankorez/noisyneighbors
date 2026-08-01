@@ -32,32 +32,6 @@ echo "$USER ALL=(root) NOPASSWD: $SYSTEMCTL_PATH restart bluetooth" | sudo tee "
 sudo chmod 0440 "$SUDOERS_FILE"
 sudo visudo -c -f "$SUDOERS_FILE" || sudo rm -f "$SUDOERS_FILE"
 
-echo "=== Enabling Bluetooth adapter auto-power-on at boot ==="
-# Without this, the adapter stays unpowered after every reboot and pairing/
-# connecting fails until someone runs "bluetoothctl power on" manually.
-BT_CONF=/etc/bluetooth/main.conf
-if grep -q "^\[Policy\]" "$BT_CONF" 2>/dev/null; then
-    if grep -q "^AutoEnable" "$BT_CONF"; then
-        sudo sed -i 's/^AutoEnable.*/AutoEnable=true/' "$BT_CONF"
-    else
-        sudo sed -i '/^\[Policy\]/a AutoEnable=true' "$BT_CONF"
-    fi
-else
-    printf '\n[Policy]\nAutoEnable=true\n' | sudo tee -a "$BT_CONF" > /dev/null
-fi
-
-echo "=== Preventing rfkill from re-blocking Bluetooth at boot ==="
-# On some Pi boots the adapter comes up soft-blocked by rfkill, which stops
-# bluetoothd from powering it on even with AutoEnable=true above.
-sudo mkdir -p /etc/systemd/system/bluetooth.service.d
-cat <<'EOF' | sudo tee /etc/systemd/system/bluetooth.service.d/override.conf > /dev/null
-[Service]
-ExecStartPre=/usr/sbin/rfkill unblock bluetooth
-EOF
-sudo systemctl daemon-reload
-sudo rfkill unblock bluetooth
-sudo systemctl restart bluetooth
-
 echo ""
 echo "=== Installation complete ==="
 echo "Useful commands:"

@@ -171,8 +171,6 @@ Note: after a Pi reboot, paired Bluetooth speakers don't reconnect automatically
 
 If scanning/pairing gets stuck (e.g. `br-connection-busy`), use the **Restart Bluetooth** button. `setup.sh` grants the app a narrowly-scoped passwordless `sudo systemctl restart bluetooth` (nothing else) for this — see `/etc/sudoers.d/noisyneighbors-bluetooth`. Without it, the button falls back to just power-cycling the adapter (`bluetoothctl power off`/`on`), which is less thorough but needs no extra privileges. If upgrading from an older install, re-run `./setup.sh` to add the sudoers rule.
 
-`setup.sh` also sets `AutoEnable=true` in `/etc/bluetooth/main.conf` so the adapter powers itself on at boot — otherwise it stays off after every reboot (`org.bluez.Error.NotReady`/`br-connection-adapter-not-powered` when trying to connect) until someone runs `bluetoothctl power on`. On some Pi boots the adapter also comes up soft-blocked by rfkill, which silently prevents that auto-power-on; `setup.sh` adds a `bluetooth.service` drop-in (`/etc/systemd/system/bluetooth.service.d/override.conf`) that runs `rfkill unblock bluetooth` right before the daemon starts, so this isn't a per-reboot manual step either. If upgrading from an older install, re-run `./setup.sh` to apply both.
-
 ## Tips for best results
 
 - **Place the Raspberry Pi and USB speakerphone high up**, close to the ceiling (on top of a tall cabinet or shelf). This improves both detection sensitivity and sound projection toward the neighbors above.
