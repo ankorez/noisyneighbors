@@ -1048,6 +1048,11 @@ def _emit_output_devices():
     })
 
 
+def _emit_volume():
+    level, max_vol = get_volume()
+    socketio.emit("volume", {"level": level, "max": max_vol})
+
+
 @socketio.on("bt_scan")
 def on_bt_scan():
     def _scan():
@@ -1069,6 +1074,9 @@ def on_bt_pair(data):
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
+        if result["ok"]:
+            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
+            _emit_volume()
     threading.Thread(target=_pair, daemon=True).start()
 
 
@@ -1083,6 +1091,9 @@ def on_bt_connect(data):
         socketio.emit("bt_connect_result", result)
         socketio.emit("bt_status_result", get_bt_status())
         _emit_output_devices()
+        if result["ok"]:
+            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
+            _emit_volume()
     threading.Thread(target=_connect, daemon=True).start()
 
 
@@ -1095,6 +1106,7 @@ def on_bt_restart_adapter():
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
+        _emit_volume()
     threading.Thread(target=_restart, daemon=True).start()
 
 
