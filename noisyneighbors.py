@@ -586,7 +586,30 @@ def get_alsa_card():
         return "1"
 
 
+def get_bt_volume():
+    """Return (level, max) for the connected Bluetooth speaker's own volume, on a 0-100 scale."""
+    sink = get_bluetooth_sink()
+    if sink:
+        try:
+            r = subprocess.run(["pactl", "get-sink-volume", sink],
+                               capture_output=True, text=True, timeout=5)
+            m = re.search(r"(\d+)%", r.stdout)
+            if m:
+                return int(m.group(1)), 100
+        except Exception as e:
+            log.error("Error reading Bluetooth volume: %s", e)
+    return 100, 100
+
+
+def set_bt_volume(level):
+    sink = get_bluetooth_sink()
+    if sink:
+        subprocess.run(["pactl", "set-sink-volume", sink, f"{level}%"], capture_output=True, timeout=5)
+
+
 def get_volume():
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        return get_bt_volume()
     card = get_alsa_card()
     try:
         result = subprocess.run(
@@ -609,6 +632,9 @@ def get_volume():
 
 
 def set_volume(level):
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        set_bt_volume(level)
+        return
     card = get_alsa_card()
     subprocess.run(
         ["amixer", "-c", card, "cset", "numid=3", str(level)],
@@ -776,6 +802,8 @@ def on_set_volume(data):
     level = int(data["level"])
     set_volume(level)
     log.info("Volume set to %d from dashboard", level)
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        return
     # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply
     def _restart_after_volume():
         time.sleep(2)
@@ -885,6 +913,8 @@ def on_set_alsa_device(data):
         "devices": list_output_devices(),
         "current": device,
     })
+    level, max_vol = get_volume()
+    socketio.emit("volume", {"level": level, "max": max_vol})
     log.info("Output device set to '%s' from dashboard", device)
 
 
