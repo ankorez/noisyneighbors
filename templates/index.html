@@ -303,6 +303,30 @@
     </div>
 
     <div class="card">
+        <h2>Strike Mode</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Randomly fire sound and vibration without waiting for a boom</p>
+        <div class="row-between">
+            <span style="font-size: 14px; color: #888;">Enable Strike Mode</span>
+            <div class="switch-track" id="strikeModeTrack" onclick="toggleStrikeMode()"></div>
+        </div>
+        <div class="slider-row">
+            <label>Min interval</label>
+            <input type="range" id="strikeMinInterval" min="10" max="600" step="10" value="60"
+                oninput="document.getElementById('strikeMinValue').textContent=this.value+'s'"
+                onchange="saveStrikeMode()">
+            <span class="slider-value" id="strikeMinValue">60s</span>
+        </div>
+        <div class="slider-row">
+            <label>Max interval</label>
+            <input type="range" id="strikeMaxInterval" min="10" max="3600" step="10" value="300"
+                oninput="document.getElementById('strikeMaxValue').textContent=this.value+'s'"
+                onchange="saveStrikeMode()">
+            <span class="slider-value" id="strikeMaxValue">300s</span>
+        </div>
+        <div id="strikeModeStatus" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+    </div>
+
+    <div class="card">
         <h2>Rate Limiting</h2>
         <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Cap responses per hour to avoid an escalating cycle</p>
         <div class="slider-row">
@@ -440,6 +464,7 @@ const socket = io();
 let threshold = 0.15;
 let scheduleEnabled = false;
 let nightModeEnabled = false;
+let strikeModeEnabled = false;
 let saveRecordingsEnabled = false;
 let maxBoomsPerHour = 0;
 let hourlyCount = 0;
@@ -664,6 +689,8 @@ function setAlsaDevice(device) { socket.emit('set_alsa_device', { device: device
 
 document.getElementById('volumeSlider').addEventListener('input', function() {
     document.getElementById('volumeValue').textContent = this.value;
+});
+document.getElementById('volumeSlider').addEventListener('change', function() {
     socket.emit('set_volume', { level: parseInt(this.value) });
 });
 socket.on('volume', function(data) {
@@ -697,6 +724,18 @@ function saveNightMode() {
         threshold: parseFloat(document.getElementById('nightThreshold').value),
         replay_mode: document.getElementById('nightReplayMode').value,
     });
+}
+
+// ---- Strike Mode ----
+function toggleStrikeMode() { strikeModeEnabled = !strikeModeEnabled; setTrack('strikeModeTrack', strikeModeEnabled); saveStrikeMode(); }
+function saveStrikeMode() {
+    var min = parseInt(document.getElementById('strikeMinInterval').value);
+    var max = parseInt(document.getElementById('strikeMaxInterval').value);
+    if (max <= min) { max = min + 10; document.getElementById('strikeMaxInterval').value = max; document.getElementById('strikeMaxValue').textContent = max + 's'; }
+    socket.emit('save_strike_mode', { enabled: strikeModeEnabled, min_interval: min, max_interval: max });
+    document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
+        ? 'Active: every ' + min + 's – ' + max + 's'
+        : '';
 }
 
 // ---- Rate Limiting ----
@@ -792,6 +831,16 @@ socket.on('extended_config', function(data) {
     saveRecordingsEnabled = data.save_recordings;
     setTrack('saveRecordingsTrack', saveRecordingsEnabled);
     if (saveRecordingsEnabled) loadRecordings();
+
+    strikeModeEnabled = data.strike_mode_enabled;
+    setTrack('strikeModeTrack', strikeModeEnabled);
+    document.getElementById('strikeMinInterval').value = data.strike_min_interval;
+    document.getElementById('strikeMinValue').textContent = data.strike_min_interval + 's';
+    document.getElementById('strikeMaxInterval').value = data.strike_max_interval;
+    document.getElementById('strikeMaxValue').textContent = data.strike_max_interval + 's';
+    document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
+        ? 'Active: every ' + data.strike_min_interval + 's – ' + data.strike_max_interval + 's'
+        : '';
 });
 
 socket.on('history', function(data) {

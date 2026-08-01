@@ -7,6 +7,7 @@ import sys
 import time
 import wave
 import queue
+import random
 import logging
 import tempfile
 import threading
@@ -91,6 +92,50 @@ def is_in_time_range(start_str, end_str):
             return now >= start or now <= end
     except (ValueError, TypeError):
         return False
+
+
+def strike_loop():
+    """Background thread: randomly fire sound/vibration when Strike Mode is active."""
+    next_strike = 0.0
+    while True:
+        time.sleep(1)
+        cfg = state["config"]
+        if not cfg.get("strike_mode_enabled", False) or not state["enabled"]:
+            next_strike = 0.0
+            continue
+        now_ts = time.monotonic()
+        if next_strike == 0.0:
+            min_i = max(1.0, float(cfg.get("strike_min_interval", 60)))
+            max_i = max(min_i + 1, float(cfg.get("strike_max_interval", 300)))
+            delay = random.uniform(min_i, max_i)
+            next_strike = now_ts + delay
+            log.info("Strike Mode: first strike in %.0fs", delay)
+            continue
+        if now_ts < next_strike:
+            continue
+        # Fire!
+        alsa = cfg.get("alsa_device") or detect_alsa_device()
+        mode = cfg.get("replay_mode", "echo")
+        log.info("Strike Mode: firing (mode=%s)", mode)
+        socketio.emit("status", {"state": "boom"})
+        if cfg.get("ps4_vibration", False):
+            intensity = cfg.get("vibration_intensity", 100)
+            threading.Thread(target=vibrate_ps4, args=(1.0, intensity), daemon=True).start()
+        if mode == "echo":
+            sr = 48000
+            t_arr = np.linspace(0, 0.5, int(sr * 0.5), dtype=np.float32)
+            audio = np.sin(2 * np.pi * 440 * t_arr) * 0.8
+            threading.Thread(target=play_audio, args=(audio, sr, alsa, sr), daemon=True).start()
+        else:
+            threading.Thread(target=play_sound_file, args=(mode, alsa), daemon=True).start()
+        time.sleep(0.5)
+        socketio.emit("status", {"state": "listening" if state["enabled"] else "disabled"})
+        # Schedule next strike
+        min_i = max(1.0, float(cfg.get("strike_min_interval", 60)))
+        max_i = max(min_i + 1, float(cfg.get("strike_max_interval", 300)))
+        interval = random.uniform(min_i, max_i)
+        next_strike = time.monotonic() + interval
+        log.info("Strike Mode: next strike in %.0fs", interval)
 
 
 def scheduler_loop():
@@ -199,12 +244,25 @@ def play_audio(audio, sr, alsa_device, out_sr):
             w.setframerate(out_sr)
             w.writeframes(stereo.tobytes())
 
-    subprocess.run(["aplay", "-D", alsa_device, tmp_path], capture_output=True)
+    with aplay_lock:
+        log.debug("aplay start: %s", alsa_device)
+        try:
+            r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
+                               capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                log.error("aplay failed (rc=%d): %s", r.returncode, r.stderr.strip())
+            else:
+                log.debug("aplay done")
+        except subprocess.TimeoutExpired:
+            log.error("aplay timed out after 15s on %s", alsa_device)
     os.unlink(tmp_path)
 
 
 SOUNDS_DIR = os.path.join(BASE_DIR, "sounds")
 AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren"]
+
+# Prevent simultaneous aplay calls (USB device can't handle two streams at once)
+aplay_lock = threading.Lock()
 
 
 def play_sound_file(name, alsa_device):
@@ -212,7 +270,17 @@ def play_sound_file(name, alsa_device):
     if not os.path.exists(path):
         log.error("Sound not found: %s", path)
         return
-    subprocess.run(["aplay", "-D", alsa_device, path], capture_output=True)
+    with aplay_lock:
+        log.debug("aplay sound start: %s on %s", name, alsa_device)
+        try:
+            r = subprocess.run(["aplay", "-D", alsa_device, path],
+                               capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                log.error("aplay sound failed (rc=%d): %s", r.returncode, r.stderr.strip())
+            else:
+                log.debug("aplay sound done: %s", name)
+        except subprocess.TimeoutExpired:
+            log.error("aplay timed out after 15s playing %s on %s", name, alsa_device)
 
 
 def save_recording(audio, sr):
@@ -435,6 +503,9 @@ def on_connect():
         "night_replay_mode": cfg.get("night_replay_mode", "echo"),
         "max_booms_per_hour": cfg.get("max_booms_per_hour", 0),
         "save_recordings": cfg.get("save_recordings", False),
+        "strike_mode_enabled": cfg.get("strike_mode_enabled", False),
+        "strike_min_interval": cfg.get("strike_min_interval", 60),
+        "strike_max_interval": cfg.get("strike_max_interval", 300),
     })
     # Today's history
     if state["today_date"] != str(date.today()):
@@ -476,6 +547,13 @@ def on_set_volume(data):
     level = int(data["level"])
     set_volume(level)
     log.info("Volume set to %d from dashboard", level)
+    # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply
+    def _restart_after_volume():
+        time.sleep(2)
+        set_volume(level)  # re-apply: Jabra resets to lower volume after USB reconnect
+        log.info("Volume re-applied (%d) and audio restarting after device reconnect", level)
+        state["restart_audio"] = True
+    threading.Thread(target=_restart_after_volume, daemon=True).start()
 
 
 @socketio.on("set_replay_mode")
@@ -494,24 +572,77 @@ def on_set_replay_mode(data):
 @socketio.on("test_sound")
 def on_test_sound():
     def _play():
+        # Non-blocking: skip if audio is already playing
+        if not aplay_lock.acquire(blocking=False):
+            log.info("Test sound skipped — already playing")
+            return
         cfg = state["config"]
         alsa_device = cfg.get("alsa_device") or detect_alsa_device()
         mode = cfg.get("replay_mode", "echo")
-        if mode == "echo":
-            sr = 48000
-            t = np.linspace(0, 0.5, int(sr * 0.5), dtype=np.float32)
-            audio = np.sin(2 * np.pi * 440 * t) * 0.8
-            play_audio(audio, sr, alsa_device, sr)
-        else:
-            play_sound_file(mode, alsa_device)
-        log.info("Test sound played (mode=%s)", mode)
+        cb = state.get("cb_state")
+        if cb is not None:
+            cb["paused"] = True
+        try:
+            if mode == "echo":
+                sr = 48000
+                t = np.linspace(0, 1.0, sr, dtype=np.float32)
+                audio = np.sin(2 * np.pi * 440 * t) * 0.8
+                peak = np.max(np.abs(audio))
+                if peak > 0:
+                    audio = audio / peak
+                audio_int16 = (audio * 32767).astype(np.int16)
+                stereo = np.column_stack([audio_int16, audio_int16])
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    tmp_path = f.name
+                    with wave.open(f, "w") as wf:
+                        wf.setnchannels(2)
+                        wf.setsampwidth(2)
+                        wf.setframerate(sr)
+                        wf.writeframes(stereo.tobytes())
+                try:
+                    r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
+                                       capture_output=True, text=True, timeout=10)
+                    if r.returncode != 0:
+                        log.error("aplay test failed (rc=%d): %s", r.returncode, r.stderr.strip())
+                except subprocess.TimeoutExpired:
+                    log.error("aplay test timed out")
+                finally:
+                    os.unlink(tmp_path)
+            else:
+                path = os.path.join(SOUNDS_DIR, f"{mode}.wav")
+                if os.path.exists(path):
+                    try:
+                        r = subprocess.run(["aplay", "-D", alsa_device, path],
+                                           capture_output=True, text=True, timeout=15)
+                        if r.returncode != 0:
+                            log.error("aplay test failed (rc=%d): %s", r.returncode, r.stderr.strip())
+                    except subprocess.TimeoutExpired:
+                        log.error("aplay test timed out")
+                else:
+                    log.error("Sound file not found: %s", path)
+            log.info("Test sound played (mode=%s)", mode)
+        finally:
+            aplay_lock.release()
+            time.sleep(0.3)
+            if cb is not None:
+                cb["paused"] = not state["enabled"]
     threading.Thread(target=_play, daemon=True).start()
 
 
 @socketio.on("test_vibration")
 def on_test_vibration():
     intensity = state["config"].get("vibration_intensity", 100)
-    threading.Thread(target=vibrate_ps4, args=(1.0, intensity), daemon=True).start()
+    cb = state.get("cb_state")
+    def _vibrate():
+        if cb is not None:
+            cb["paused"] = True
+        try:
+            vibrate_ps4(1.0, intensity)
+        finally:
+            time.sleep(0.2)
+            if cb is not None:
+                cb["paused"] = not state["enabled"]
+    threading.Thread(target=_vibrate, daemon=True).start()
 
 
 @socketio.on("toggle_ps4_vibration")
@@ -646,6 +777,20 @@ def on_calibrate_threshold():
 @socketio.on("get_stats")
 def on_get_stats():
     socketio.emit("stats", compute_stats())
+
+
+@socketio.on("save_strike_mode")
+def on_save_strike_mode(data):
+    cfg = state["config"]
+    cfg["strike_mode_enabled"] = bool(data.get("enabled", False))
+    try:
+        cfg["strike_min_interval"] = float(data.get("min_interval", 60))
+        cfg["strike_max_interval"] = float(data.get("max_interval", 300))
+    except (TypeError, ValueError):
+        pass
+    save_config(cfg)
+    log.info("Strike Mode: enabled=%s min=%.0fs max=%.0fs",
+             cfg["strike_mode_enabled"], cfg["strike_min_interval"], cfg["strike_max_interval"])
 
 
 @socketio.on("delete_recording")
@@ -921,6 +1066,8 @@ def main():
 
     # Start scheduler thread
     threading.Thread(target=scheduler_loop, daemon=True).start()
+    # Start strike mode thread
+    threading.Thread(target=strike_loop, daemon=True).start()
 
     # Start audio detection thread (auto-restarts)
     def audio_loop_wrapper():

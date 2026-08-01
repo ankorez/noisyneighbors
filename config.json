@@ -20,5 +20,8 @@
   "night_threshold": 0.10,
   "night_replay_mode": "echo",
   "max_booms_per_hour": 0,
-  "save_recordings": false
+  "save_recordings": false,
+  "strike_mode_enabled": false,
+  "strike_min_interval": 60,
+  "strike_max_interval": 300
 }
