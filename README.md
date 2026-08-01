@@ -53,7 +53,12 @@ source venv/bin/activate
 python3 noisyneighbors.py
 ```
 
-The web dashboard is available at `http://<hostname>.local:5000`. It shows real-time audio level, detection history, and lets you adjust settings and enable/disable detection.
+The web dashboard is available at `http://<hostname>.local:5000`. It's organized into tabs:
+
+- **Live** — real-time audio level, boom/status indicator, enable/disable toggle, and test buttons for sound and vibration.
+- **Config** — replay mode, threshold, volume, scheduler, night mode, strike mode, and rate limiting.
+- **Devices** — audio input/output device selection and PS4 controller vibration settings.
+- **Stats** — detection history and aggregate stats, plus saved recordings (if enabled).
 
 ### systemd service (auto-start)
 
@@ -84,7 +89,20 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
   "output_sample_rate": 48000,
   "replay_mode": "echo",
   "ps4_vibration": false,
-  "vibration_intensity": 100
+  "vibration_intensity": 100,
+  "schedule_enabled": false,
+  "schedule_start": "22:00",
+  "schedule_end": "08:00",
+  "night_mode_enabled": false,
+  "night_mode_start": "22:00",
+  "night_mode_end": "08:00",
+  "night_threshold": 0.10,
+  "night_replay_mode": "echo",
+  "max_booms_per_hour": 0,
+  "save_recordings": false,
+  "strike_mode_enabled": false,
+  "strike_min_interval": 60,
+  "strike_max_interval": 300
 }
 ```
 
@@ -102,6 +120,16 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
 | `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`. |
 | `ps4_vibration` | Enable PS4 controller vibration on boom detection (triggers alongside the sound). |
 | `vibration_intensity` | Vibration intensity (10-100%). |
+| `schedule_enabled` | Only run detection during the `schedule_start`–`schedule_end` window (auto enable/disable). |
+| `schedule_start` / `schedule_end` | Detection active window (HH:MM), wraps past midnight if `start > end`. |
+| `night_mode_enabled` | Use a different threshold and replay mode during a night window. |
+| `night_mode_start` / `night_mode_end` | Night window (HH:MM), wraps past midnight if `start > end`. |
+| `night_threshold` | RMS threshold used during the night window instead of `threshold`. |
+| `night_replay_mode` | Replay mode used during the night window instead of `replay_mode`. |
+| `max_booms_per_hour` | Cap responses per rolling hour to avoid an escalating cycle. `0` = unlimited. |
+| `save_recordings` | Save each detected boom as a WAV file in `recordings/` (viewable/downloadable/deletable from the Stats tab). |
+| `strike_mode_enabled` | Randomly fire sound/vibration on an interval, independent of boom detection. |
+| `strike_min_interval` / `strike_max_interval` | Random delay range (seconds) between Strike Mode firings. |
 | `web_port` | Web dashboard port (default 5000). |
 
 ### Finding audio devices
