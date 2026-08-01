@@ -1,7 +1,0 @@
-config.json
-history.json
-recordings/
-venv/
-__pycache__/
-*.pyc
-.DS_Store

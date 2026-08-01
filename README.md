@@ -74,7 +74,7 @@ The service starts automatically on boot.
 
 ## Configuration
 
-`config.json` is generated on first run from `config.example.json` (`setup.sh` does this automatically) and is **not tracked by git** — it's local runtime state (the app writes to it whenever you change something in the dashboard), so `git pull` never touches or conflicts with it. Edit it via the web dashboard (applied in real-time) or manually (requires a service restart):
+Edit `config.json` via the web dashboard (applied in real-time) or manually (requires a service restart):
 
 ```json
 {
@@ -161,7 +161,7 @@ Pair a Bluetooth speaker (e.g. Bose) and select it as the output, instead of the
    systemctl --user enable --now pulseaudio.service pulseaudio.socket
    sudo rfkill unblock bluetooth   # if the adapter shows as soft-blocked (check with `rfkill list bluetooth`)
    ```
-   `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template — the UID is substituted at install time rather than using systemd's `%U` specifier, which doesn't reliably resolve to the service's `User=` on all systemd versions). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" -e "s|__UID__|$(id -u)|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
+   `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
 2. Put the speaker in pairing mode, then from the **Devices** tab → **Bluetooth Speaker** card: click **Scan for speakers** and then **Pair** next to it. Once paired, it's remembered — use **Connect** to reconnect after a reboot, or **Forget** to remove it.
 3. Once connected, it appears as an extra entry in the **Output (speaker)** dropdown at the top of the Devices tab — select it to route the response sound there instead of the main output.
 

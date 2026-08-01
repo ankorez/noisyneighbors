@@ -14,14 +14,11 @@ source venv/bin/activate
 echo "=== Installing Python dependencies ==="
 pip install -r requirements.txt
 
-echo "=== Setting up config.json ==="
-[ -f config.json ] || cp config.example.json config.json
-
 echo "=== Adding user to input group (for PS4 controller) ==="
 sudo usermod -aG input "$USER"
 
 echo "=== Installing systemd service ==="
-sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" -e "s|__UID__|$(id -u)|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service > /dev/null
+sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable noisyneighbors
 
