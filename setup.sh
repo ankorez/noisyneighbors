@@ -18,7 +18,7 @@ echo "=== Adding user to input group (for PS4 controller) ==="
 sudo usermod -aG input "$USER"
 
 echo "=== Installing systemd service ==="
-sudo cp noisyneighbors.service /etc/systemd/system/
+sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable noisyneighbors
 

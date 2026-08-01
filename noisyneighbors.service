@@ -1,12 +1,13 @@
 [Unit]
 Description=NoisyNeighbors - Noise detection and replay
-After=sound.target
+After=sound.target bluetooth.target
 
 [Service]
 Type=simple
-User=ankorez
-WorkingDirectory=/home/ankorez/noisyneighbors
-ExecStart=/home/ankorez/noisyneighbors/venv/bin/python3 /home/ankorez/noisyneighbors/noisyneighbors.py
+User=__USER__
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+WorkingDirectory=__HOME__/noisyneighbors
+ExecStart=__HOME__/noisyneighbors/venv/bin/python3 __HOME__/noisyneighbors/noisyneighbors.py
 Restart=on-failure
 RestartSec=5
 

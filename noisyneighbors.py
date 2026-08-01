@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import sys
 import time
 import wave
@@ -223,6 +224,174 @@ def detect_alsa_device():
     return "plughw:0,0"
 
 
+def get_bluetooth_sink():
+    """Find a connected Bluetooth (A2DP) PulseAudio sink."""
+    try:
+        result = subprocess.run(["pactl", "list", "sinks", "short"],
+                                 capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and "bluez" in parts[1]:
+                return parts[1]
+    except Exception as e:
+        log.error("Error listing pulse sinks: %s", e)
+    return None
+
+
+MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
+
+
+def list_paired_bt_devices():
+    """List Bluetooth devices already known/paired with this adapter."""
+    try:
+        r = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True, timeout=5)
+        devices = []
+        for line in r.stdout.splitlines():
+            m = re.match(r"Device ([0-9A-Fa-f:]{17}) (.+)", line.strip())
+            if m:
+                devices.append({"mac": m.group(1), "name": m.group(2)})
+        return devices
+    except Exception as e:
+        log.error("Error listing paired BT devices: %s", e)
+        return []
+
+
+def get_bt_status():
+    """Return the current Bluetooth secondary-output connection status."""
+    sink = get_bluetooth_sink()
+    mac = None
+    name = None
+    if sink:
+        m = re.search(r"bluez_sink\.([0-9A-Fa-f_]+)", sink)
+        if m:
+            mac = m.group(1).replace("_", ":")
+            for d in list_paired_bt_devices():
+                if d["mac"].upper() == mac.upper():
+                    name = d["name"]
+                    break
+    return {"connected": sink is not None, "mac": mac, "name": name}
+
+
+def scan_bt_devices(duration=8):
+    """Scan for nearby Bluetooth devices and return newly discovered, named ones."""
+    try:
+        proc = subprocess.Popen(
+            ["bluetoothctl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+        )
+
+        def send(cmd):
+            proc.stdin.write(cmd + "\n")
+            proc.stdin.flush()
+
+        send("power on")
+        time.sleep(0.5)
+        send("scan on")
+        time.sleep(duration)
+        send("scan off")
+        time.sleep(0.5)
+        send("devices")
+        time.sleep(0.5)
+        send("quit")
+        out, _ = proc.communicate(timeout=10)
+    except Exception as e:
+        log.error("BT scan failed: %s", e)
+        return []
+
+    devices = {}
+    for line in out.splitlines():
+        m = re.match(r"Device ([0-9A-Fa-f:]{17}) (.+)", line.strip())
+        if m:
+            mac, name = m.group(1), m.group(2)
+            # Skip unnamed devices (name defaults to MAC-with-dashes) and LE-only ads
+            # (classic BR/EDR audio pairing needs the non-"LE-" advertisement)
+            if name.replace(":", "-") == mac.replace(":", "-") or name.startswith("LE-"):
+                continue
+            devices[mac] = name
+    return [{"mac": k, "name": v} for k, v in devices.items()]
+
+
+def pair_bt_device(mac):
+    """Pair, trust and connect a Bluetooth device by MAC address."""
+    try:
+        proc = subprocess.Popen(
+            ["bluetoothctl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+        )
+
+        def send(cmd):
+            proc.stdin.write(cmd + "\n")
+            proc.stdin.flush()
+
+        send("power on")
+        time.sleep(0.3)
+        send("agent on")
+        send("default-agent")
+        send(f"pair {mac}")
+        time.sleep(8)
+        send(f"trust {mac}")
+        time.sleep(1)
+        send(f"connect {mac}")
+        time.sleep(3)
+        send("quit")
+        out, _ = proc.communicate(timeout=15)
+    except Exception as e:
+        log.error("BT pairing error: %s", e)
+        return {"ok": False, "message": str(e)}
+
+    if "Connection successful" in out:
+        return {"ok": True, "message": "Paired and connected"}
+    if "Pairing successful" in out:
+        return {"ok": True, "message": "Paired (connecting...)"}
+    if "Failed to pair" in out or "AuthenticationFailed" in out or "org.bluez.Error" in out:
+        return {"ok": False, "message": "Pairing failed — put the speaker in pairing mode and retry"}
+    return {"ok": False, "message": "No response — check logs"}
+
+
+def connect_bt_device(mac):
+    """(Re)connect an already-paired Bluetooth device."""
+    try:
+        r = subprocess.run(["bluetoothctl", "connect", mac], capture_output=True, text=True, timeout=15)
+        lines = [l for l in r.stdout.strip().splitlines() if l.strip()]
+        ok = "Connection successful" in r.stdout
+        return {"ok": ok, "message": lines[-1] if lines else ""}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def forget_bt_device(mac):
+    """Remove a paired Bluetooth device."""
+    try:
+        r = subprocess.run(["bluetoothctl", "remove", mac], capture_output=True, text=True, timeout=10)
+        return {"ok": r.returncode == 0, "message": r.stdout.strip()}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+# Prevent simultaneous paplay calls (Bluetooth A2DP can't handle overlapping streams)
+pulse_lock = threading.Lock()
+
+
+def play_secondary(path):
+    """Play a WAV file on the secondary Bluetooth output, if enabled."""
+    if not state["config"].get("secondary_output_enabled", False):
+        return
+    sink = get_bluetooth_sink()
+    if not sink:
+        log.error("Secondary output enabled but no Bluetooth sink found")
+        return
+    with pulse_lock:
+        try:
+            r = subprocess.run(["paplay", "--device", sink, path],
+                               capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                log.error("paplay failed (rc=%d): %s", r.returncode, r.stderr.strip())
+        except subprocess.TimeoutExpired:
+            log.error("paplay timed out after 15s on %s", sink)
+        except FileNotFoundError:
+            log.error("paplay not found — install pulseaudio-utils")
+
+
 def play_audio(audio, sr, alsa_device, out_sr):
     if sr != out_sr:
         n_samples = int(len(audio) * out_sr / sr)
@@ -244,6 +413,9 @@ def play_audio(audio, sr, alsa_device, out_sr):
             w.setframerate(out_sr)
             w.writeframes(stereo.tobytes())
 
+    secondary_thread = threading.Thread(target=play_secondary, args=(tmp_path,), daemon=True)
+    secondary_thread.start()
+
     with aplay_lock:
         log.debug("aplay start: %s", alsa_device)
         try:
@@ -255,6 +427,8 @@ def play_audio(audio, sr, alsa_device, out_sr):
                 log.debug("aplay done")
         except subprocess.TimeoutExpired:
             log.error("aplay timed out after 15s on %s", alsa_device)
+
+    secondary_thread.join(timeout=20)
     os.unlink(tmp_path)
 
 
@@ -270,6 +444,9 @@ def play_sound_file(name, alsa_device):
     if not os.path.exists(path):
         log.error("Sound not found: %s", path)
         return
+    secondary_thread = threading.Thread(target=play_secondary, args=(path,), daemon=True)
+    secondary_thread.start()
+
     with aplay_lock:
         log.debug("aplay sound start: %s on %s", name, alsa_device)
         try:
@@ -281,6 +458,8 @@ def play_sound_file(name, alsa_device):
                 log.debug("aplay sound done: %s", name)
         except subprocess.TimeoutExpired:
             log.error("aplay timed out after 15s playing %s on %s", name, alsa_device)
+
+    secondary_thread.join(timeout=20)
 
 
 def save_recording(audio, sr):
@@ -506,7 +685,10 @@ def on_connect():
         "strike_mode_enabled": cfg.get("strike_mode_enabled", False),
         "strike_min_interval": cfg.get("strike_min_interval", 60),
         "strike_max_interval": cfg.get("strike_max_interval", 300),
+        "secondary_output_enabled": cfg.get("secondary_output_enabled", False),
     })
+    socketio.emit("bt_status_result", get_bt_status())
+    socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
     # Today's history
     if state["today_date"] != str(date.today()):
         state["today_date"] = str(date.today())
@@ -599,6 +781,8 @@ def on_test_sound():
                         wf.setsampwidth(2)
                         wf.setframerate(sr)
                         wf.writeframes(stereo.tobytes())
+                secondary_thread = threading.Thread(target=play_secondary, args=(tmp_path,), daemon=True)
+                secondary_thread.start()
                 try:
                     r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
                                        capture_output=True, text=True, timeout=10)
@@ -607,10 +791,13 @@ def on_test_sound():
                 except subprocess.TimeoutExpired:
                     log.error("aplay test timed out")
                 finally:
+                    secondary_thread.join(timeout=20)
                     os.unlink(tmp_path)
             else:
                 path = os.path.join(SOUNDS_DIR, f"{mode}.wav")
                 if os.path.exists(path):
+                    secondary_thread = threading.Thread(target=play_secondary, args=(path,), daemon=True)
+                    secondary_thread.start()
                     try:
                         r = subprocess.run(["aplay", "-D", alsa_device, path],
                                            capture_output=True, text=True, timeout=15)
@@ -618,6 +805,8 @@ def on_test_sound():
                             log.error("aplay test failed (rc=%d): %s", r.returncode, r.stderr.strip())
                     except subprocess.TimeoutExpired:
                         log.error("aplay test timed out")
+                    finally:
+                        secondary_thread.join(timeout=20)
                 else:
                     log.error("Sound file not found: %s", path)
             log.info("Test sound played (mode=%s)", mode)
@@ -791,6 +980,64 @@ def on_save_strike_mode(data):
     save_config(cfg)
     log.info("Strike Mode: enabled=%s min=%.0fs max=%.0fs",
              cfg["strike_mode_enabled"], cfg["strike_min_interval"], cfg["strike_max_interval"])
+
+
+@socketio.on("save_secondary_output")
+def on_save_secondary_output(data):
+    cfg = state["config"]
+    cfg["secondary_output_enabled"] = bool(data.get("enabled", False))
+    save_config(cfg)
+    log.info("Secondary output (Bluetooth): %s", "enabled" if cfg["secondary_output_enabled"] else "disabled")
+
+
+@socketio.on("bt_scan")
+def on_bt_scan():
+    def _scan():
+        socketio.emit("bt_scan_started", {})
+        devices = scan_bt_devices(duration=8)
+        socketio.emit("bt_scan_result", {"devices": devices})
+    threading.Thread(target=_scan, daemon=True).start()
+
+
+@socketio.on("bt_pair")
+def on_bt_pair(data):
+    mac = data.get("mac", "")
+    if not MAC_RE.match(mac):
+        return
+    def _pair():
+        result = pair_bt_device(mac)
+        result["mac"] = mac
+        socketio.emit("bt_pair_result", result)
+        socketio.emit("bt_status_result", get_bt_status())
+        socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+    threading.Thread(target=_pair, daemon=True).start()
+
+
+@socketio.on("bt_connect")
+def on_bt_connect(data):
+    mac = data.get("mac", "")
+    if not MAC_RE.match(mac):
+        return
+    def _connect():
+        result = connect_bt_device(mac)
+        result["mac"] = mac
+        socketio.emit("bt_connect_result", result)
+        socketio.emit("bt_status_result", get_bt_status())
+    threading.Thread(target=_connect, daemon=True).start()
+
+
+@socketio.on("bt_forget")
+def on_bt_forget(data):
+    mac = data.get("mac", "")
+    if not MAC_RE.match(mac):
+        return
+    def _forget():
+        result = forget_bt_device(mac)
+        result["mac"] = mac
+        socketio.emit("bt_forget_result", result)
+        socketio.emit("bt_status_result", get_bt_status())
+        socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+    threading.Thread(target=_forget, daemon=True).start()
 
 
 @socketio.on("delete_recording")

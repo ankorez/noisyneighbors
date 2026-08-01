@@ -412,6 +412,26 @@
         </div>
     </div>
 
+    <div class="card">
+        <h2>Secondary Output (Bluetooth)</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Also play the response sound on a paired Bluetooth speaker</p>
+        <div class="row-between">
+            <span style="font-size: 14px; color: #888;">Enable Bluetooth output</span>
+            <div class="switch-track" id="secondaryOutputTrack" onclick="toggleSecondaryOutput()"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px;">
+            <div id="btDot" style="width: 10px; height: 10px; border-radius: 50%; background: #666;"></div>
+            <span id="btStatusText" style="font-size: 14px; color: #888;">Not connected</span>
+        </div>
+
+        <div style="font-size: 12px; color: #888; margin-top: 14px; margin-bottom: 4px;">Paired speakers</div>
+        <div id="btPairedList" style="font-size: 13px;"></div>
+
+        <button class="btn btn-secondary" style="margin-top: 12px;" id="btScanBtn" onclick="btScan()">Scan for speakers</button>
+        <div id="btScanStatus" style="font-size: 12px; color: #666; margin-top: 6px;"></div>
+        <div id="btScanList" style="font-size: 13px; margin-top: 4px;"></div>
+    </div>
+
 </div>
 </div>
 
@@ -466,6 +486,9 @@ let scheduleEnabled = false;
 let nightModeEnabled = false;
 let strikeModeEnabled = false;
 let saveRecordingsEnabled = false;
+let secondaryOutputEnabled = false;
+let btPairedDevices = [];
+let btConnectedMac = null;
 let maxBoomsPerHour = 0;
 let hourlyCount = 0;
 let chartsReady = false;
@@ -841,6 +864,9 @@ socket.on('extended_config', function(data) {
     document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
         ? 'Active: every ' + data.strike_min_interval + 's – ' + data.strike_max_interval + 's'
         : '';
+
+    secondaryOutputEnabled = data.secondary_output_enabled;
+    setTrack('secondaryOutputTrack', secondaryOutputEnabled);
 });
 
 socket.on('history', function(data) {
@@ -854,6 +880,113 @@ socket.on('history', function(data) {
         el.innerHTML = '<span class="history-time">' + item.time + '</span><span>' + item.duration.toFixed(1) + 's</span><span class="history-rms">' + item.rms.toFixed(4) + '</span>';
         list.appendChild(el);
     });
+});
+
+// ---- Secondary Output (Bluetooth) ----
+function toggleSecondaryOutput() {
+    secondaryOutputEnabled = !secondaryOutputEnabled;
+    setTrack('secondaryOutputTrack', secondaryOutputEnabled);
+    socket.emit('save_secondary_output', { enabled: secondaryOutputEnabled });
+}
+
+function renderBtPairedList() {
+    var el = document.getElementById('btPairedList');
+    if (btPairedDevices.length === 0) {
+        el.innerHTML = '<div style="color: #666;">No paired speakers yet</div>';
+        return;
+    }
+    el.innerHTML = '';
+    btPairedDevices.forEach(function(d) {
+        var connected = d.mac === btConnectedMac;
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;';
+        var label = document.createElement('span');
+        label.textContent = d.name + (connected ? ' (connected)' : '');
+        if (connected) label.style.color = '#4caf50';
+        row.appendChild(label);
+        var btns = document.createElement('span');
+        if (!connected) {
+            var connectBtn = document.createElement('button');
+            connectBtn.className = 'btn btn-secondary';
+            connectBtn.textContent = 'Connect';
+            connectBtn.onclick = function() { socket.emit('bt_connect', { mac: d.mac }); };
+            btns.appendChild(connectBtn);
+        }
+        var forgetBtn = document.createElement('button');
+        forgetBtn.className = 'btn btn-secondary';
+        forgetBtn.style.marginLeft = '6px';
+        forgetBtn.textContent = 'Forget';
+        forgetBtn.onclick = function() {
+            if (confirm('Forget ' + d.name + '?')) socket.emit('bt_forget', { mac: d.mac });
+        };
+        btns.appendChild(forgetBtn);
+        row.appendChild(btns);
+        el.appendChild(row);
+    });
+}
+
+function btScan() {
+    document.getElementById('btScanBtn').disabled = true;
+    document.getElementById('btScanStatus').textContent = 'Scanning for 8s — put your speaker in pairing mode...';
+    document.getElementById('btScanList').innerHTML = '';
+    socket.emit('bt_scan');
+}
+
+socket.on('bt_scan_result', function(data) {
+    document.getElementById('btScanBtn').disabled = false;
+    document.getElementById('btScanStatus').textContent = data.devices.length
+        ? ''
+        : 'No new speakers found. Make sure pairing mode is active and try again.';
+    var el = document.getElementById('btScanList');
+    el.innerHTML = '';
+    data.devices.forEach(function(d) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;';
+        var label = document.createElement('span');
+        label.textContent = d.name;
+        row.appendChild(label);
+        var pairBtn = document.createElement('button');
+        pairBtn.className = 'btn btn-secondary';
+        pairBtn.textContent = 'Pair';
+        pairBtn.onclick = function() {
+            pairBtn.disabled = true;
+            pairBtn.textContent = 'Pairing...';
+            socket.emit('bt_pair', { mac: d.mac });
+        };
+        row.appendChild(pairBtn);
+        el.appendChild(row);
+    });
+});
+
+socket.on('bt_pair_result', function(data) {
+    document.getElementById('btScanStatus').textContent = (data.ok ? 'Paired: ' : 'Failed: ') + data.message;
+});
+
+socket.on('bt_connect_result', function(data) {
+    document.getElementById('btScanStatus').textContent = (data.ok ? 'Connected' : 'Failed: ') + data.message;
+});
+
+socket.on('bt_forget_result', function(data) {
+    document.getElementById('btScanStatus').textContent = data.ok ? 'Removed' : ('Failed: ' + data.message);
+});
+
+socket.on('bt_status_result', function(data) {
+    btConnectedMac = data.mac;
+    var dot = document.getElementById('btDot');
+    var text = document.getElementById('btStatusText');
+    if (data.connected) {
+        dot.style.background = '#4caf50';
+        text.textContent = 'Connected: ' + (data.name || data.mac);
+    } else {
+        dot.style.background = '#666';
+        text.textContent = 'Not connected';
+    }
+    renderBtPairedList();
+});
+
+socket.on('bt_paired_devices', function(data) {
+    btPairedDevices = data.devices;
+    renderBtPairedList();
 });
 
 // ---- Recordings ----

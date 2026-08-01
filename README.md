@@ -57,7 +57,7 @@ The web dashboard is available at `http://<hostname>.local:5000`. It's organized
 
 - **Live** — real-time audio level, boom/status indicator, enable/disable toggle, and test buttons for sound and vibration.
 - **Config** — replay mode, threshold, volume, scheduler, night mode, strike mode, and rate limiting.
-- **Devices** — audio input/output device selection and PS4 controller vibration settings.
+- **Devices** — audio input/output device selection, PS4 controller vibration settings, and Bluetooth secondary output (scan/pair/connect/forget).
 - **Stats** — detection history and aggregate stats, plus saved recordings (if enabled).
 
 ### systemd service (auto-start)
@@ -102,7 +102,8 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
   "save_recordings": false,
   "strike_mode_enabled": false,
   "strike_min_interval": 60,
-  "strike_max_interval": 300
+  "strike_max_interval": 300,
+  "secondary_output_enabled": false
 }
 ```
 
@@ -130,6 +131,7 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
 | `save_recordings` | Save each detected boom as a WAV file in `recordings/` (viewable/downloadable/deletable from the Stats tab). |
 | `strike_mode_enabled` | Randomly fire sound/vibration on an interval, independent of boom detection. |
 | `strike_min_interval` / `strike_max_interval` | Random delay range (seconds) between Strike Mode firings. |
+| `secondary_output_enabled` | Also play the response sound on a paired Bluetooth speaker (via PulseAudio), in addition to the main output. |
 | `web_port` | Web dashboard port (default 5000). |
 
 ### Finding audio devices
@@ -149,6 +151,25 @@ Start NoisyNeighbors and make some noise. The logs show the RMS value for each d
 Connect a DualShock 4 controller via USB. The dashboard shows its connection status and lets you enable vibration on boom detection. Vibration triggers alongside the response sound.
 
 The setup script automatically adds the user to the `input` group (required for controller access). A reboot may be needed after the first install.
+
+### Secondary Bluetooth output (optional)
+
+Pair a Bluetooth speaker (e.g. Bose) to play the response sound on it in addition to the main output.
+
+1. One-time system setup:
+   ```bash
+   sudo apt install -y pulseaudio pulseaudio-module-bluetooth
+   sudo loginctl enable-linger "$USER"
+   systemctl --user enable --now pulseaudio.service pulseaudio.socket
+   sudo rfkill unblock bluetooth   # if the adapter shows as soft-blocked (check with `rfkill list bluetooth`)
+   ```
+   `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
+2. Put the speaker in pairing mode, then from the **Devices** tab → **Secondary Output (Bluetooth)** card: click **Scan for speakers** and then **Pair** next to it. Once paired, it's remembered — use **Connect** to reconnect after a reboot, or **Forget** to remove it.
+3. Toggle **Enable Bluetooth output** to have the response sound play there in addition to the main output.
+
+The app auto-detects the connected Bluetooth (A2DP) sink via `pactl` each time it plays a sound — no need to hardcode a device name. If the speaker disconnects, errors are logged and the main output keeps working normally.
+
+Note: after a Pi reboot, paired Bluetooth speakers don't reconnect automatically — use the **Connect** button in the dashboard (or `bluetoothctl connect <MAC>` over SSH).
 
 ## Tips for best results
 
