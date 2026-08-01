@@ -51,10 +51,16 @@ state = {
 }
 
 CONFIG_PATH = "config.json"
+CONFIG_EXAMPLE_PATH = "config.example.json"
 HISTORY_PATH = "history.json"
 
 
 def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        with open(CONFIG_EXAMPLE_PATH) as f:
+            defaults = json.load(f)
+        save_config(defaults)
+        return defaults
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
@@ -481,7 +487,7 @@ def play_audio(audio, sr, alsa_device, out_sr):
 
 
 SOUNDS_DIR = os.path.join(BASE_DIR, "sounds")
-AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren"]
+AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren", "sandstorm", "hammering"]
 
 # Prevent simultaneous aplay calls (USB device can't handle two streams at once)
 aplay_lock = threading.Lock()
@@ -586,34 +592,70 @@ def get_alsa_card():
         return "1"
 
 
-def get_volume():
-    card = get_alsa_card()
+def get_bt_volume():
+    """Return (level, max) for the connected Bluetooth speaker's own volume, on a 0-100 scale."""
+    sink = get_bluetooth_sink()
+    if sink:
+        try:
+            r = subprocess.run(["pactl", "get-sink-volume", sink],
+                               capture_output=True, text=True, timeout=5)
+            m = re.search(r"(\d+)%", r.stdout)
+            if m:
+                return int(m.group(1)), 100
+        except Exception as e:
+            log.error("Error reading Bluetooth volume: %s", e)
+    return 100, 100
+
+
+def set_bt_volume(level):
+    sink = get_bluetooth_sink()
+    if sink:
+        subprocess.run(["pactl", "set-sink-volume", sink, f"{level}%"], capture_output=True, timeout=5)
+
+
+def get_alsa_volume_control(card):
+    """Find a usable playback volume control name for an ALSA card — varies per device."""
     try:
-        result = subprocess.run(
-            ["amixer", "-c", card, "cget", "numid=3"],
-            capture_output=True, text=True
-        )
-        output = result.stdout
-        max_vol = 11
-        for line in output.split("\n"):
-            if "max=" in line:
-                for part in line.split(","):
-                    if part.strip().startswith("max="):
-                        max_vol = int(part.strip().split("=")[1])
-            if ": values=" in line:
-                level = int(line.strip().split("=")[1])
-                return level, max_vol
-    except Exception:
-        pass
-    return 11, 11
+        r = subprocess.run(["amixer", "-c", card, "scontrols"], capture_output=True, text=True, timeout=5)
+        names = re.findall(r"'([^']+)'", r.stdout)
+        if not names:
+            return None
+        for preferred in ["Speaker", "Master", "PCM", "Headphone", "Playback"]:
+            for n in names:
+                if preferred.lower() in n.lower():
+                    return n
+        return names[0]
+    except Exception as e:
+        log.error("Error listing mixer controls for card %s: %s", card, e)
+        return None
+
+
+def get_volume():
+    """Return (level, max) on a 0-100 scale for whichever output is currently selected."""
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        return get_bt_volume()
+    card = get_alsa_card()
+    control = get_alsa_volume_control(card)
+    if control:
+        try:
+            r = subprocess.run(["amixer", "-c", card, "sget", control],
+                               capture_output=True, text=True, timeout=5)
+            m = re.search(r"\[(\d+)%\]", r.stdout)
+            if m:
+                return int(m.group(1)), 100
+        except Exception as e:
+            log.error("Error reading volume for card %s: %s", card, e)
+    return 100, 100
 
 
 def set_volume(level):
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        set_bt_volume(level)
+        return
     card = get_alsa_card()
-    subprocess.run(
-        ["amixer", "-c", card, "cset", "numid=3", str(level)],
-        capture_output=True
-    )
+    control = get_alsa_volume_control(card)
+    if control:
+        subprocess.run(["amixer", "-c", card, "sset", control, f"{level}%"], capture_output=True, timeout=5)
 
 
 def compute_stats():
@@ -776,12 +818,17 @@ def on_set_volume(data):
     level = int(data["level"])
     set_volume(level)
     log.info("Volume set to %d from dashboard", level)
-    # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply
+    if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
+        return
+    # Jabra SPEAK 410 briefly drops off ALSA after amixer, which resets its own volume —
+    # restart the InputStream to recapture the reconnected device, then report back
+    # whatever volume it actually settled on instead of fighting to force an exact value.
     def _restart_after_volume():
         time.sleep(2)
-        set_volume(level)  # re-apply: Jabra resets to lower volume after USB reconnect
-        log.info("Volume re-applied (%d) and audio restarting after device reconnect", level)
         state["restart_audio"] = True
+        log.info("Audio restarting after device reconnect")
+        time.sleep(2)
+        _emit_volume()
     threading.Thread(target=_restart_after_volume, daemon=True).start()
 
 
@@ -885,6 +932,8 @@ def on_set_alsa_device(data):
         "devices": list_output_devices(),
         "current": device,
     })
+    level, max_vol = get_volume()
+    socketio.emit("volume", {"level": level, "max": max_vol})
     log.info("Output device set to '%s' from dashboard", device)
 
 
@@ -1002,6 +1051,11 @@ def _emit_output_devices():
     })
 
 
+def _emit_volume():
+    level, max_vol = get_volume()
+    socketio.emit("volume", {"level": level, "max": max_vol})
+
+
 @socketio.on("bt_scan")
 def on_bt_scan():
     def _scan():
@@ -1023,6 +1077,9 @@ def on_bt_pair(data):
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
+        if result["ok"]:
+            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
+            _emit_volume()
     threading.Thread(target=_pair, daemon=True).start()
 
 
@@ -1037,6 +1094,9 @@ def on_bt_connect(data):
         socketio.emit("bt_connect_result", result)
         socketio.emit("bt_status_result", get_bt_status())
         _emit_output_devices()
+        if result["ok"]:
+            time.sleep(1.5)  # give PulseAudio a moment to create the A2DP sink
+            _emit_volume()
     threading.Thread(target=_connect, daemon=True).start()
 
 
@@ -1049,6 +1109,7 @@ def on_bt_restart_adapter():
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
         _emit_output_devices()
+        _emit_volume()
     threading.Thread(target=_restart, daemon=True).start()
 
 

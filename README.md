@@ -74,7 +74,7 @@ The service starts automatically on boot.
 
 ## Configuration
 
-Edit `config.json` via the web dashboard (applied in real-time) or manually (requires a service restart):
+`config.json` is generated on first run from `config.example.json` (`setup.sh` does this automatically) and is **not tracked by git** — it's local runtime state (the app writes to it whenever you change something in the dashboard), so `git pull` never touches or conflicts with it. Edit it via the web dashboard (applied in real-time) or manually (requires a service restart):
 
 ```json
 {
@@ -161,7 +161,7 @@ Pair a Bluetooth speaker (e.g. Bose) and select it as the output, instead of the
    systemctl --user enable --now pulseaudio.service pulseaudio.socket
    sudo rfkill unblock bluetooth   # if the adapter shows as soft-blocked (check with `rfkill list bluetooth`)
    ```
-   `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
+   `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template — the UID is substituted at install time rather than using systemd's `%U` specifier, which doesn't reliably resolve to the service's `User=` on all systemd versions). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" -e "s|__UID__|$(id -u)|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
 2. Put the speaker in pairing mode, then from the **Devices** tab → **Bluetooth Speaker** card: click **Scan for speakers** and then **Pair** next to it. Once paired, it's remembered — use **Connect** to reconnect after a reboot, or **Forget** to remove it.
 3. Once connected, it appears as an extra entry in the **Output (speaker)** dropdown at the top of the Devices tab — select it to route the response sound there instead of the main output.
 
@@ -170,6 +170,8 @@ The app talks to the connected Bluetooth (A2DP) speaker via `paplay`/`pactl` —
 Note: after a Pi reboot, paired Bluetooth speakers don't reconnect automatically — use the **Connect** button in the dashboard (or `bluetoothctl connect <MAC>` over SSH).
 
 If scanning/pairing gets stuck (e.g. `br-connection-busy`), use the **Restart Bluetooth** button. `setup.sh` grants the app a narrowly-scoped passwordless `sudo systemctl restart bluetooth` (nothing else) for this — see `/etc/sudoers.d/noisyneighbors-bluetooth`. Without it, the button falls back to just power-cycling the adapter (`bluetoothctl power off`/`on`), which is less thorough but needs no extra privileges. If upgrading from an older install, re-run `./setup.sh` to add the sudoers rule.
+
+`setup.sh` also sets `AutoEnable=true` in `/etc/bluetooth/main.conf` so the adapter powers itself on at boot — otherwise it stays off after every reboot (`org.bluez.Error.NotReady`/`br-connection-adapter-not-powered` when trying to connect) until someone runs `bluetoothctl power on`. On some Pi boots the adapter also comes up soft-blocked by rfkill, which silently prevents that auto-power-on; `setup.sh` adds a `bluetooth.service` drop-in (`/etc/systemd/system/bluetooth.service.d/override.conf`) that runs `rfkill unblock bluetooth` right before the daemon starts, so this isn't a per-reboot manual step either. If upgrading from an older install, re-run `./setup.sh` to apply both.
 
 ## Tips for best results
 
