@@ -117,7 +117,7 @@ The service starts automatically on boot.
 | `device` | sounddevice device index for capture. `null` = auto-detect first USB device. |
 | `alsa_device` | ALSA device for playback, or `"bluetooth"` to use a paired Bluetooth speaker. `null` = auto-detect USB device. |
 | `output_sample_rate` | Output sample rate for playback (48000 recommended). |
-| `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`. |
+| `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`, `sandstorm`, `hammering`. |
 | `ps4_vibration` | Enable PS4 controller vibration on boom detection (triggers alongside the sound). |
 | `vibration_intensity` | Vibration intensity (10-100%). |
 | `schedule_enabled` | Only run detection during the `schedule_start`–`schedule_end` window (auto enable/disable). |
