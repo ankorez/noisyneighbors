@@ -57,7 +57,7 @@ The web dashboard is available at `http://<hostname>.local:5000`. It's organized
 
 - **Live** — real-time audio level, boom/status indicator, enable/disable toggle, and test buttons for sound and vibration.
 - **Config** — replay mode, threshold, volume, scheduler, night mode, strike mode, and rate limiting.
-- **Devices** — audio input/output device selection, PS4 controller vibration settings, and Bluetooth secondary output (scan/pair/connect/forget).
+- **Devices** — audio input/output device selection (including a paired Bluetooth speaker), PS4 controller vibration settings, and Bluetooth speaker pairing (scan/pair/connect/forget).
 - **Stats** — detection history and aggregate stats, plus saved recordings (if enabled).
 
 ### systemd service (auto-start)
@@ -102,8 +102,7 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
   "save_recordings": false,
   "strike_mode_enabled": false,
   "strike_min_interval": 60,
-  "strike_max_interval": 300,
-  "secondary_output_enabled": false
+  "strike_max_interval": 300
 }
 ```
 
@@ -116,7 +115,7 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
 | `sample_rate` | Sample rate. `null` = auto-detect from device. |
 | `channels` | Input channels (1 = mono). |
 | `device` | sounddevice device index for capture. `null` = auto-detect first USB device. |
-| `alsa_device` | ALSA device for playback. `null` = auto-detect USB device. |
+| `alsa_device` | ALSA device for playback, or `"bluetooth"` to use a paired Bluetooth speaker. `null` = auto-detect USB device. |
 | `output_sample_rate` | Output sample rate for playback (48000 recommended). |
 | `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`. |
 | `ps4_vibration` | Enable PS4 controller vibration on boom detection (triggers alongside the sound). |
@@ -131,7 +130,6 @@ Edit `config.json` via the web dashboard (applied in real-time) or manually (req
 | `save_recordings` | Save each detected boom as a WAV file in `recordings/` (viewable/downloadable/deletable from the Stats tab). |
 | `strike_mode_enabled` | Randomly fire sound/vibration on an interval, independent of boom detection. |
 | `strike_min_interval` / `strike_max_interval` | Random delay range (seconds) between Strike Mode firings. |
-| `secondary_output_enabled` | Also play the response sound on a paired Bluetooth speaker (via PulseAudio), in addition to the main output. |
 | `web_port` | Web dashboard port (default 5000). |
 
 ### Finding audio devices
@@ -152,9 +150,9 @@ Connect a DualShock 4 controller via USB. The dashboard shows its connection sta
 
 The setup script automatically adds the user to the `input` group (required for controller access). A reboot may be needed after the first install.
 
-### Secondary Bluetooth output (optional)
+### Bluetooth speaker output (optional)
 
-Pair a Bluetooth speaker (e.g. Bose) to play the response sound on it in addition to the main output.
+Pair a Bluetooth speaker (e.g. Bose) and select it as the output, instead of the main ALSA device — the response sound plays on whichever one is selected in the **Output (speaker)** dropdown, not both at once.
 
 1. One-time system setup:
    ```bash
@@ -164,10 +162,10 @@ Pair a Bluetooth speaker (e.g. Bose) to play the response sound on it in additio
    sudo rfkill unblock bluetooth   # if the adapter shows as soft-blocked (check with `rfkill list bluetooth`)
    ```
    `noisyneighbors.service` needs `XDG_RUNTIME_DIR` set to reach your PulseAudio session (already included in the provided unit template). If upgrading from an older install, re-run the service install step: `./setup.sh`, or manually: `sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sudo tee /etc/systemd/system/noisyneighbors.service && sudo systemctl daemon-reload && sudo systemctl restart noisyneighbors`.
-2. Put the speaker in pairing mode, then from the **Devices** tab → **Secondary Output (Bluetooth)** card: click **Scan for speakers** and then **Pair** next to it. Once paired, it's remembered — use **Connect** to reconnect after a reboot, or **Forget** to remove it.
-3. Toggle **Enable Bluetooth output** to have the response sound play there in addition to the main output.
+2. Put the speaker in pairing mode, then from the **Devices** tab → **Bluetooth Speaker** card: click **Scan for speakers** and then **Pair** next to it. Once paired, it's remembered — use **Connect** to reconnect after a reboot, or **Forget** to remove it.
+3. Once connected, it appears as an extra entry in the **Output (speaker)** dropdown at the top of the Devices tab — select it to route the response sound there instead of the main output.
 
-The app auto-detects the connected Bluetooth (A2DP) sink via `pactl` each time it plays a sound — no need to hardcode a device name. If the speaker disconnects, errors are logged and the main output keeps working normally.
+The app talks to the connected Bluetooth (A2DP) speaker via `paplay`/`pactl` — no need to hardcode a device name. If the speaker disconnects, errors are logged and switching back to the main ALSA output keeps everything working normally.
 
 Note: after a Pi reboot, paired Bluetooth speakers don't reconnect automatically — use the **Connect** button in the dashboard (or `bluetoothctl connect <MAC>` over SSH).
 

@@ -413,13 +413,9 @@
     </div>
 
     <div class="card">
-        <h2>Secondary Output (Bluetooth)</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Also play the response sound on a paired Bluetooth speaker</p>
-        <div class="row-between">
-            <span style="font-size: 14px; color: #888;">Enable Bluetooth output</span>
-            <div class="switch-track" id="secondaryOutputTrack" onclick="toggleSecondaryOutput()"></div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px;">
+        <h2>Bluetooth Speaker</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Pair a Bluetooth speaker here, then pick it in the Output dropdown above to route sound there instead of the main output</p>
+        <div style="display: flex; align-items: center; gap: 8px;">
             <div id="btDot" style="width: 10px; height: 10px; border-radius: 50%; background: #666;"></div>
             <span id="btStatusText" style="font-size: 14px; color: #888;">Not connected</span>
         </div>
@@ -487,7 +483,6 @@ let scheduleEnabled = false;
 let nightModeEnabled = false;
 let strikeModeEnabled = false;
 let saveRecordingsEnabled = false;
-let secondaryOutputEnabled = false;
 let btPairedDevices = [];
 let btConnectedMac = null;
 let maxBoomsPerHour = 0;
@@ -704,7 +699,8 @@ socket.on('alsa_devices', function(data) {
     sel.innerHTML = '';
     data.devices.forEach(function(d) {
         var opt = document.createElement('option');
-        opt.value = d.id; opt.textContent = d.name + ' (' + d.id + ')';
+        opt.value = d.id;
+        opt.textContent = d.id === 'bluetooth' ? (d.name + ' (Bluetooth)') : (d.name + ' (' + d.id + ')');
         if (d.id === data.current) opt.selected = true;
         sel.appendChild(opt);
     });
@@ -865,9 +861,6 @@ socket.on('extended_config', function(data) {
     document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
         ? 'Active: every ' + data.strike_min_interval + 's – ' + data.strike_max_interval + 's'
         : '';
-
-    secondaryOutputEnabled = data.secondary_output_enabled;
-    setTrack('secondaryOutputTrack', secondaryOutputEnabled);
 });
 
 socket.on('history', function(data) {
@@ -883,13 +876,7 @@ socket.on('history', function(data) {
     });
 });
 
-// ---- Secondary Output (Bluetooth) ----
-function toggleSecondaryOutput() {
-    secondaryOutputEnabled = !secondaryOutputEnabled;
-    setTrack('secondaryOutputTrack', secondaryOutputEnabled);
-    socket.emit('save_secondary_output', { enabled: secondaryOutputEnabled });
-}
-
+// ---- Bluetooth Speaker ----
 function renderBtPairedList() {
     var el = document.getElementById('btPairedList');
     if (btPairedDevices.length === 0) {

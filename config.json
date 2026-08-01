@@ -23,6 +23,5 @@
   "save_recordings": false,
   "strike_mode_enabled": false,
   "strike_min_interval": 60,
-  "strike_max_interval": 300,
-  "secondary_output_enabled": false
+  "strike_max_interval": 300
 }

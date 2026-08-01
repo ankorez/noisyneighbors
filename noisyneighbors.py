@@ -408,17 +408,26 @@ def restart_bluetooth_adapter():
     }
 
 
+BLUETOOTH_OUTPUT_ID = "bluetooth"
+
+
+def list_output_devices():
+    """ALSA playback devices plus the currently connected Bluetooth speaker, if any."""
+    devices = list_alsa_playback()
+    bt = get_bt_status()
+    if bt["connected"]:
+        devices.append({"id": BLUETOOTH_OUTPUT_ID, "name": bt["name"] or "Bluetooth speaker"})
+    return devices
+
+
 # Prevent simultaneous paplay calls (Bluetooth A2DP can't handle overlapping streams)
 pulse_lock = threading.Lock()
 
 
-def play_secondary(path):
-    """Play a WAV file on the secondary Bluetooth output, if enabled."""
-    if not state["config"].get("secondary_output_enabled", False):
-        return
+def play_via_bluetooth(path):
     sink = get_bluetooth_sink()
     if not sink:
-        log.error("Secondary output enabled but no Bluetooth sink found")
+        log.error("Bluetooth output selected but no connected speaker found")
         return
     with pulse_lock:
         try:
@@ -453,22 +462,21 @@ def play_audio(audio, sr, alsa_device, out_sr):
             w.setframerate(out_sr)
             w.writeframes(stereo.tobytes())
 
-    secondary_thread = threading.Thread(target=play_secondary, args=(tmp_path,), daemon=True)
-    secondary_thread.start()
+    if alsa_device == BLUETOOTH_OUTPUT_ID:
+        play_via_bluetooth(tmp_path)
+    else:
+        with aplay_lock:
+            log.debug("aplay start: %s", alsa_device)
+            try:
+                r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
+                                   capture_output=True, text=True, timeout=15)
+                if r.returncode != 0:
+                    log.error("aplay failed (rc=%d): %s", r.returncode, r.stderr.strip())
+                else:
+                    log.debug("aplay done")
+            except subprocess.TimeoutExpired:
+                log.error("aplay timed out after 15s on %s", alsa_device)
 
-    with aplay_lock:
-        log.debug("aplay start: %s", alsa_device)
-        try:
-            r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
-                               capture_output=True, text=True, timeout=15)
-            if r.returncode != 0:
-                log.error("aplay failed (rc=%d): %s", r.returncode, r.stderr.strip())
-            else:
-                log.debug("aplay done")
-        except subprocess.TimeoutExpired:
-            log.error("aplay timed out after 15s on %s", alsa_device)
-
-    secondary_thread.join(timeout=20)
     os.unlink(tmp_path)
 
 
@@ -484,8 +492,10 @@ def play_sound_file(name, alsa_device):
     if not os.path.exists(path):
         log.error("Sound not found: %s", path)
         return
-    secondary_thread = threading.Thread(target=play_secondary, args=(path,), daemon=True)
-    secondary_thread.start()
+
+    if alsa_device == BLUETOOTH_OUTPUT_ID:
+        play_via_bluetooth(path)
+        return
 
     with aplay_lock:
         log.debug("aplay sound start: %s on %s", name, alsa_device)
@@ -498,8 +508,6 @@ def play_sound_file(name, alsa_device):
                 log.debug("aplay sound done: %s", name)
         except subprocess.TimeoutExpired:
             log.error("aplay timed out after 15s playing %s on %s", name, alsa_device)
-
-    secondary_thread.join(timeout=20)
 
 
 def save_recording(audio, sr):
@@ -705,7 +713,7 @@ def on_connect():
         "current": cfg.get("device"),
     })
     socketio.emit("alsa_devices", {
-        "devices": list_alsa_playback(),
+        "devices": list_output_devices(),
         "current": cfg.get("alsa_device", ""),
     })
     level, max_vol = get_volume()
@@ -725,7 +733,6 @@ def on_connect():
         "strike_mode_enabled": cfg.get("strike_mode_enabled", False),
         "strike_min_interval": cfg.get("strike_min_interval", 60),
         "strike_max_interval": cfg.get("strike_max_interval", 300),
-        "secondary_output_enabled": cfg.get("secondary_output_enabled", False),
     })
     socketio.emit("bt_status_result", get_bt_status())
     socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
@@ -794,13 +801,17 @@ def on_set_replay_mode(data):
 @socketio.on("test_sound")
 def on_test_sound():
     def _play():
-        # Non-blocking: skip if audio is already playing
-        if not aplay_lock.acquire(blocking=False):
-            log.info("Test sound skipped — already playing")
-            return
         cfg = state["config"]
         alsa_device = cfg.get("alsa_device") or detect_alsa_device()
         mode = cfg.get("replay_mode", "echo")
+
+        # Non-blocking: skip if that output is already playing something
+        lock = pulse_lock if alsa_device == BLUETOOTH_OUTPUT_ID else aplay_lock
+        if not lock.acquire(blocking=False):
+            log.info("Test sound skipped — already playing")
+            return
+        lock.release()
+
         cb = state.get("cb_state")
         if cb is not None:
             cb["paused"] = True
@@ -809,49 +820,11 @@ def on_test_sound():
                 sr = 48000
                 t = np.linspace(0, 1.0, sr, dtype=np.float32)
                 audio = np.sin(2 * np.pi * 440 * t) * 0.8
-                peak = np.max(np.abs(audio))
-                if peak > 0:
-                    audio = audio / peak
-                audio_int16 = (audio * 32767).astype(np.int16)
-                stereo = np.column_stack([audio_int16, audio_int16])
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                    tmp_path = f.name
-                    with wave.open(f, "w") as wf:
-                        wf.setnchannels(2)
-                        wf.setsampwidth(2)
-                        wf.setframerate(sr)
-                        wf.writeframes(stereo.tobytes())
-                secondary_thread = threading.Thread(target=play_secondary, args=(tmp_path,), daemon=True)
-                secondary_thread.start()
-                try:
-                    r = subprocess.run(["aplay", "-D", alsa_device, tmp_path],
-                                       capture_output=True, text=True, timeout=10)
-                    if r.returncode != 0:
-                        log.error("aplay test failed (rc=%d): %s", r.returncode, r.stderr.strip())
-                except subprocess.TimeoutExpired:
-                    log.error("aplay test timed out")
-                finally:
-                    secondary_thread.join(timeout=20)
-                    os.unlink(tmp_path)
+                play_audio(audio, sr, alsa_device, sr)
             else:
-                path = os.path.join(SOUNDS_DIR, f"{mode}.wav")
-                if os.path.exists(path):
-                    secondary_thread = threading.Thread(target=play_secondary, args=(path,), daemon=True)
-                    secondary_thread.start()
-                    try:
-                        r = subprocess.run(["aplay", "-D", alsa_device, path],
-                                           capture_output=True, text=True, timeout=15)
-                        if r.returncode != 0:
-                            log.error("aplay test failed (rc=%d): %s", r.returncode, r.stderr.strip())
-                    except subprocess.TimeoutExpired:
-                        log.error("aplay test timed out")
-                    finally:
-                        secondary_thread.join(timeout=20)
-                else:
-                    log.error("Sound file not found: %s", path)
+                play_sound_file(mode, alsa_device)
             log.info("Test sound played (mode=%s)", mode)
         finally:
-            aplay_lock.release()
             time.sleep(0.3)
             if cb is not None:
                 cb["paused"] = not state["enabled"]
@@ -909,10 +882,10 @@ def on_set_alsa_device(data):
     state["config"]["alsa_device"] = device
     save_config(state["config"])
     socketio.emit("alsa_devices", {
-        "devices": list_alsa_playback(),
+        "devices": list_output_devices(),
         "current": device,
     })
-    log.info("ALSA output device set to '%s' from dashboard", device)
+    log.info("Output device set to '%s' from dashboard", device)
 
 
 @socketio.on("toggle_enabled")
@@ -1022,12 +995,11 @@ def on_save_strike_mode(data):
              cfg["strike_mode_enabled"], cfg["strike_min_interval"], cfg["strike_max_interval"])
 
 
-@socketio.on("save_secondary_output")
-def on_save_secondary_output(data):
-    cfg = state["config"]
-    cfg["secondary_output_enabled"] = bool(data.get("enabled", False))
-    save_config(cfg)
-    log.info("Secondary output (Bluetooth): %s", "enabled" if cfg["secondary_output_enabled"] else "disabled")
+def _emit_output_devices():
+    socketio.emit("alsa_devices", {
+        "devices": list_output_devices(),
+        "current": state["config"].get("alsa_device", ""),
+    })
 
 
 @socketio.on("bt_scan")
@@ -1050,6 +1022,7 @@ def on_bt_pair(data):
         socketio.emit("bt_pair_result", result)
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+        _emit_output_devices()
     threading.Thread(target=_pair, daemon=True).start()
 
 
@@ -1063,6 +1036,7 @@ def on_bt_connect(data):
         result["mac"] = mac
         socketio.emit("bt_connect_result", result)
         socketio.emit("bt_status_result", get_bt_status())
+        _emit_output_devices()
     threading.Thread(target=_connect, daemon=True).start()
 
 
@@ -1074,6 +1048,7 @@ def on_bt_restart_adapter():
         time.sleep(1)
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+        _emit_output_devices()
     threading.Thread(target=_restart, daemon=True).start()
 
 
@@ -1088,6 +1063,7 @@ def on_bt_forget(data):
         socketio.emit("bt_forget_result", result)
         socketio.emit("bt_status_result", get_bt_status())
         socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+        _emit_output_devices()
     threading.Thread(target=_forget, daemon=True).start()
 
 
