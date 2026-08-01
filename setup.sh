@@ -45,6 +45,17 @@ if grep -q "^\[Policy\]" "$BT_CONF" 2>/dev/null; then
 else
     printf '\n[Policy]\nAutoEnable=true\n' | sudo tee -a "$BT_CONF" > /dev/null
 fi
+
+echo "=== Preventing rfkill from re-blocking Bluetooth at boot ==="
+# On some Pi boots the adapter comes up soft-blocked by rfkill, which stops
+# bluetoothd from powering it on even with AutoEnable=true above.
+sudo mkdir -p /etc/systemd/system/bluetooth.service.d
+cat <<'EOF' | sudo tee /etc/systemd/system/bluetooth.service.d/override.conf > /dev/null
+[Service]
+ExecStartPre=/usr/sbin/rfkill unblock bluetooth
+EOF
+sudo systemctl daemon-reload
+sudo rfkill unblock bluetooth
 sudo systemctl restart bluetooth
 
 echo ""
