@@ -820,12 +820,17 @@ def on_set_volume(data):
     log.info("Volume set to %d from dashboard", level)
     if state["config"].get("alsa_device") == BLUETOOTH_OUTPUT_ID:
         return
-    # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply
+    # Jabra SPEAK 410 briefly drops off ALSA after amixer — wait for reconnect then re-apply.
+    # Restarting the InputStream below can itself trigger a second USB reconnect that
+    # resets the volume again, so re-apply once more after that has had time to settle.
     def _restart_after_volume():
         time.sleep(2)
-        set_volume(level)  # re-apply: Jabra resets to lower volume after USB reconnect
+        set_volume(level)
         log.info("Volume re-applied (%d) and audio restarting after device reconnect", level)
         state["restart_audio"] = True
+        time.sleep(2)
+        set_volume(level)
+        log.info("Volume re-applied (%d) again after audio restart settled", level)
     threading.Thread(target=_restart_after_volume, daemon=True).start()
 
 
