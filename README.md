@@ -171,6 +171,8 @@ The app auto-detects the connected Bluetooth (A2DP) sink via `pactl` each time i
 
 Note: after a Pi reboot, paired Bluetooth speakers don't reconnect automatically — use the **Connect** button in the dashboard (or `bluetoothctl connect <MAC>` over SSH).
 
+If scanning/pairing gets stuck (e.g. `br-connection-busy`), use the **Restart Bluetooth** button. `setup.sh` grants the app a narrowly-scoped passwordless `sudo systemctl restart bluetooth` (nothing else) for this — see `/etc/sudoers.d/noisyneighbors-bluetooth`. Without it, the button falls back to just power-cycling the adapter (`bluetoothctl power off`/`on`), which is less thorough but needs no extra privileges. If upgrading from an older install, re-run `./setup.sh` to add the sudoers rule.
+
 ## Tips for best results
 
 - **Place the Raspberry Pi and USB speakerphone high up**, close to the ceiling (on top of a tall cabinet or shelf). This improves both detection sensitivity and sound projection toward the neighbors above.

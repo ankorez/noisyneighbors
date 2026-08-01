@@ -368,6 +368,29 @@ def forget_bt_device(mac):
         return {"ok": False, "message": str(e)}
 
 
+def restart_bluetooth_adapter():
+    """Restart the Bluetooth daemon (if passwordless sudo is set up) and power-cycle the adapter."""
+    # -n: never prompt for a password — if sudo isn't configured for this, fail fast instead of hanging
+    r = subprocess.run(["sudo", "-n", "systemctl", "restart", "bluetooth"],
+                       capture_output=True, text=True, timeout=15)
+    daemon_restarted = r.returncode == 0
+    if not daemon_restarted:
+        log.warning("Could not restart bluetooth.service (passwordless sudo not configured?): %s",
+                   r.stderr.strip())
+    time.sleep(1 if daemon_restarted else 0)
+    try:
+        subprocess.run(["bluetoothctl", "power", "off"], capture_output=True, text=True, timeout=10)
+        time.sleep(1)
+        subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, text=True, timeout=10)
+    except Exception as e:
+        log.error("Bluetooth adapter power-cycle failed: %s", e)
+        return {"ok": False, "message": str(e)}
+    return {
+        "ok": True,
+        "message": "Bluetooth daemon and adapter restarted" if daemon_restarted else "Adapter power-cycled (daemon restart needs sudo setup)",
+    }
+
+
 # Prevent simultaneous paplay calls (Bluetooth A2DP can't handle overlapping streams)
 pulse_lock = threading.Lock()
 
@@ -1024,6 +1047,17 @@ def on_bt_connect(data):
         socketio.emit("bt_connect_result", result)
         socketio.emit("bt_status_result", get_bt_status())
     threading.Thread(target=_connect, daemon=True).start()
+
+
+@socketio.on("bt_restart_adapter")
+def on_bt_restart_adapter():
+    def _restart():
+        result = restart_bluetooth_adapter()
+        socketio.emit("bt_restart_result", result)
+        time.sleep(1)
+        socketio.emit("bt_status_result", get_bt_status())
+        socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
+    threading.Thread(target=_restart, daemon=True).start()
 
 
 @socketio.on("bt_forget")

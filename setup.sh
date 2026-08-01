@@ -22,6 +22,13 @@ sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" noisyneighbors.service | sud
 sudo systemctl daemon-reload
 sudo systemctl enable noisyneighbors
 
+echo "=== Allowing passwordless Bluetooth restart (for the dashboard's Restart button) ==="
+SYSTEMCTL_PATH=$(command -v systemctl)
+SUDOERS_FILE=/etc/sudoers.d/noisyneighbors-bluetooth
+echo "$USER ALL=(root) NOPASSWD: $SYSTEMCTL_PATH restart bluetooth" | sudo tee "$SUDOERS_FILE" > /dev/null
+sudo chmod 0440 "$SUDOERS_FILE"
+sudo visudo -c -f "$SUDOERS_FILE" || sudo rm -f "$SUDOERS_FILE"
+
 echo ""
 echo "=== Installation complete ==="
 echo "Useful commands:"
