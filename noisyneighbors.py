@@ -256,20 +256,37 @@ def list_paired_bt_devices():
         return []
 
 
+def is_bt_device_connected(mac):
+    try:
+        r = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True, timeout=5)
+        return "Connected: yes" in r.stdout
+    except Exception:
+        return False
+
+
 def get_bt_status():
     """Return the current Bluetooth secondary-output connection status."""
     sink = get_bluetooth_sink()
     mac = None
-    name = None
     if sink:
         m = re.search(r"bluez_sink\.([0-9A-Fa-f_]+)", sink)
         if m:
             mac = m.group(1).replace("_", ":")
-            for d in list_paired_bt_devices():
-                if d["mac"].upper() == mac.upper():
-                    name = d["name"]
-                    break
-    return {"connected": sink is not None, "mac": mac, "name": name}
+
+    paired = list_paired_bt_devices()
+    if mac is None:
+        # PulseAudio can take a second or two to create the A2DP sink after BlueZ
+        # reports the connection — fall back to asking BlueZ directly.
+        for d in paired:
+            if is_bt_device_connected(d["mac"]):
+                mac = d["mac"]
+                break
+
+    name = None
+    if mac:
+        name = next((d["name"] for d in paired if d["mac"].upper() == mac.upper()), None)
+
+    return {"connected": mac is not None, "mac": mac, "name": name}
 
 
 def scan_bt_devices(duration=8):
