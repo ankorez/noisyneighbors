@@ -197,11 +197,27 @@ def list_input_devices():
 
 def detect_device():
     devices = sd.query_devices()
+    # Prefer a device clearly identifiable as known hardware — ALSA/PortAudio
+    # enumeration order can shift after system updates (new virtual PCM plugins
+    # get inserted), so a generic "usb" substring match alone is too easy to
+    # collide with something else that happens to reuse a stale index.
     for i, d in enumerate(devices):
-        name = d["name"].lower()
-        if "usb" in name and d["max_input_channels"] > 0:
+        if "jabra" in d["name"].lower() and d["max_input_channels"] > 0:
+            return i, d
+    for i, d in enumerate(devices):
+        if "usb" in d["name"].lower() and d["max_input_channels"] > 0:
             return i, d
     return None, None
+
+
+def is_valid_input_device(index, channels):
+    """Check a configured device index still points to something usable —
+    protects against a stale index after ALSA/PortAudio enumeration changes."""
+    try:
+        info = sd.query_devices(index)
+        return info["max_input_channels"] >= channels
+    except Exception:
+        return False
 
 
 def list_alsa_playback():
@@ -1155,10 +1171,17 @@ def audio_loop():
         save_config(cfg)
         log.info("Auto-detected ALSA output: %s", alsa_device)
 
+    if device is not None and not is_valid_input_device(device, channels):
+        log.warning("Configured input device %d is no longer valid (ALSA enumeration "
+                    "likely changed) — re-detecting", device)
+        device = None
+
     if device is None:
         idx, dev_info = detect_device()
         if idx is not None:
             device = idx
+            cfg["device"] = idx
+            save_config(cfg)
             log.info("Auto-detected device: [%d] %s", idx, dev_info["name"])
         else:
             log.error("No USB device detected.")
