@@ -64,6 +64,8 @@ A status bar stays visible on every tab: current state, today's count, **Pause**
 
 The dashboard needs no internet access: its JavaScript libraries are bundled in `static/vendor/`.
 
+The interface follows your system's light/dark setting; the button at the top right cycles auto / light / dark. On phones the tabs move to a bottom bar, and the Config sections collapse (each shows its current state, and remembers whether it was open).
+
 ### systemd service (auto-start)
 
 ```bash
