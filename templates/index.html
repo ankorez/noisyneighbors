@@ -5,181 +5,218 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NoisyNeighbors</title>
     <style>
+        :root {
+            --bg: #1a1a2e; --card: #16213e; --line: #0f3460; --line2: #1a4a8a;
+            --accent: #4ecca3; --danger: #e23e57; --warn: #f0a500;
+            --text: #eee; --muted: #9aa0b4; --dim: #7d8499;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #1a1a2e; color: #eee; min-height: 100vh;
+            background: var(--bg); color: var(--text); min-height: 100vh;
         }
-        .header {
-            background: #16213e; padding: 16px 20px;
-            text-align: center; border-bottom: 2px solid #0f3460;
-            position: sticky; top: 0; z-index: 50;
+        body.flash::before {
+            content: ''; position: fixed; inset: 0; z-index: 90; pointer-events: none;
+            box-shadow: inset 0 0 0 6px var(--danger), inset 0 0 80px rgba(226, 62, 87, 0.5);
+            animation: flash 0.8s ease-out forwards;
         }
-        .header h1 { font-size: 20px; }
-        .header .subtitle { color: #888; font-size: 12px; margin-top: 2px; }
+        @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
 
-        /* Tab nav (top) */
-        .tab-nav {
-            background: #16213e; border-bottom: 2px solid #0f3460;
-            display: flex; max-width: 800px; margin: 0 auto;
-        }
-        .tab-nav-wrap {
-            background: #16213e; border-bottom: 2px solid #0f3460;
-        }
+        /* ---- Top bar (sticky) ---- */
+        .topbar { position: sticky; top: 0; z-index: 50; background: var(--card); border-bottom: 2px solid var(--line); }
+        .header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 0; max-width: 800px; margin: 0 auto; }
+        .header h1 { font-size: 18px; }
+        .conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+        .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+        .conn.lost .conn-dot { background: var(--danger); }
+        .conn.lost { color: var(--danger); }
+        .statusbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 10px; max-width: 800px; margin: 0 auto; flex-wrap: wrap; }
+        .status-indicator { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: bold; flex: 1; min-width: 150px; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; flex-shrink: 0; }
+        .status-dot.boom { background: var(--danger); animation: none; }
+        .status-dot.cooldown { background: var(--warn); animation: none; }
+        .status-dot.disabled { background: #666; animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .boom-count { text-align: center; line-height: 1.1; }
+        .boom-count b { display: block; font-size: 24px; color: var(--danger); }
+        .boom-count span { font-size: 11px; color: var(--muted); }
+        .night-badge { background: #1a3060; color: var(--accent); font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: normal; }
+        .toggle-btn { padding: 8px 16px; border: none; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; }
+        .toggle-btn.on { background: var(--accent); color: var(--bg); }
+        .toggle-btn.off { background: #666; color: var(--text); }
+        .menu-wrap { position: relative; }
+        .menu { display: none; position: absolute; right: 0; top: 110%; background: var(--card); border: 1px solid var(--line2); border-radius: 8px; min-width: 190px; z-index: 60; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+        .menu.open { display: block; }
+        .menu button { display: block; width: 100%; text-align: left; padding: 10px 14px; background: none; border: none; color: var(--text); font-size: 14px; cursor: pointer; font-family: inherit; }
+        .menu button:hover { background: var(--line); }
+
+        .tab-nav { display: flex; max-width: 800px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+        .tab-nav::-webkit-scrollbar { display: none; }
         .tab-btn {
-            padding: 12px 20px; background: none; border: none;
+            flex: 1; padding: 10px 14px; background: none; border: none;
             border-bottom: 3px solid transparent; margin-bottom: -2px;
-            color: #555; cursor: pointer; font-size: 14px;
-            font-family: inherit; font-weight: 500;
-            transition: color 0.2s, border-color 0.2s;
-            white-space: nowrap;
+            color: var(--dim); cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 500;
+            transition: color 0.2s, border-color 0.2s; white-space: nowrap;
         }
-        .tab-btn.active { color: #4ecca3; border-bottom-color: #4ecca3; }
-        .tab-btn:hover:not(.active) { color: #888; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-btn:hover:not(.active) { color: var(--muted); }
 
-        /* Tab content */
+        .banner { display: none; background: var(--danger); color: #fff; text-align: center; padding: 8px 16px; font-size: 14px; }
+        .banner.show { display: block; }
+
+        /* ---- Layout ---- */
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
-
         .container { max-width: 800px; margin: 0 auto; padding: 16px; }
-
-        .card {
-            background: #16213e; border-radius: 12px;
-            padding: 20px; margin-bottom: 16px;
-        }
-        .card h2 {
-            font-size: 16px; color: #888;
-            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
-        }
-
-        /* Status */
-        .status-row { display: flex; align-items: center; justify-content: space-between; }
-        .status-indicator { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: bold; }
-        .status-dot {
-            width: 16px; height: 16px; border-radius: 50%;
-            background: #4ecca3; animation: pulse 2s infinite;
-        }
-        .status-dot.boom { background: #e23e57; animation: none; }
-        .status-dot.cooldown { background: #f0a500; animation: none; }
-        .status-dot.disabled { background: #666; animation: none; }
-        .toggle-btn {
-            padding: 8px 20px; border: none; border-radius: 20px;
-            font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.3s;
-        }
-        .toggle-btn.on { background: #4ecca3; color: #1a1a2e; }
-        .toggle-btn.off { background: #666; color: #eee; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .boom-count { font-size: 48px; font-weight: bold; color: #e23e57; }
-        .boom-count-label { color: #888; font-size: 14px; }
+        .card { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .card h2 { font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+        .hint { font-size: 13px; color: var(--dim); margin-bottom: 12px; }
+        .small { font-size: 12px; color: var(--dim); margin-top: 8px; }
+        .field-label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+        .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .row-between > span { font-size: 14px; color: var(--muted); }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+        .field { margin-top: 12px; }
 
         /* VU */
-        .vu-container { height: 32px; background: #0f3460; border-radius: 6px; overflow: hidden; position: relative; }
-        .vu-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #4ecca3, #f0a500, #e23e57); transition: width 0.1s; border-radius: 6px; }
-        .vu-threshold { position: absolute; top: 0; height: 100%; width: 2px; background: #fff; opacity: 0.6; }
-        .vu-labels { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #666; }
+        .vu-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+        .vu-db { font-size: 28px; font-weight: bold; font-variant-numeric: tabular-nums; }
+        .vu-raw { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+        .vu-container { height: 28px; background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 55%, var(--warn) 80%, var(--danger) 100%); border-radius: 6px; overflow: hidden; position: relative; }
+        /* dark cover that slides in from the right: the visible part is the current level */
+        .vu-bar { position: absolute; top: 0; right: 0; height: 100%; width: 100%; background: var(--line); transition: width 0.1s; }
+        .vu-threshold { position: absolute; top: 0; height: 100%; width: 2px; background: #fff; opacity: 0.8; transition: left 0.3s; }
+        .vu-labels { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--dim); }
+        #sparkline { width: 100%; height: 70px; display: block; margin-top: 10px; background: var(--line); border-radius: 6px; }
 
         /* Sliders */
         .slider-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
-        .slider-row label { font-size: 13px; color: #888; min-width: 80px; }
-        .slider-row input[type="range"] { flex: 1; -webkit-appearance: none; height: 8px; border-radius: 4px; background: #0f3460; outline: none; }
-        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #4ecca3; cursor: pointer; }
-        .slider-value { min-width: 40px; text-align: right; font-weight: bold; font-size: 14px; }
+        .slider-row label { font-size: 13px; color: var(--muted); flex: 0 0 104px; }
+        input[type="range"] { flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; background: var(--line); outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+        input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border: none; border-radius: 50%; background: var(--accent); cursor: pointer; }
+        .slider-value { min-width: 56px; text-align: right; font-weight: bold; font-size: 14px; font-variant-numeric: tabular-nums; }
 
-        /* Volume */
-        .volume-row { display: flex; align-items: center; gap: 12px; }
-        .volume-slider { flex: 1; -webkit-appearance: none; height: 8px; border-radius: 4px; background: #0f3460; outline: none; }
-        .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #4ecca3; cursor: pointer; }
-        .volume-value { min-width: 40px; text-align: right; font-weight: bold; }
-
-        /* History */
-        .history-list { max-height: 300px; overflow-y: auto; }
-        .history-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 14px; }
-        .history-item:last-child { border-bottom: none; }
-        .history-time { color: #888; }
-        .history-rms { color: #e23e57; font-weight: bold; }
-        .history-empty { color: #666; text-align: center; padding: 20px; }
-        .history-muted { opacity: 0.5; }
-
-        /* Sound select */
-        .sound-select { width: 100%; padding: 10px; border: 1px solid #0f3460; border-radius: 6px; background: #1a1a2e; color: #eee; font-size: 16px; }
-
-        /* Buttons */
-        .btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold; }
-        .btn-reset { background: #0f3460; color: #888; margin-top: 12px; }
-        .btn-reset:hover { background: #1a4a8a; color: #eee; }
-        .btn-secondary { background: #0f3460; color: #eee; }
-        .btn-secondary:hover { background: #1a4a8a; }
-        .save-feedback { display: inline-block; margin-left: 12px; color: #4ecca3; font-size: 14px; opacity: 0; transition: opacity 0.3s; }
-
-        /* Toggle switch */
-        .switch-track {
-            width: 48px; height: 26px; background: #0f3460;
-            border-radius: 13px; position: relative;
-            transition: background 0.3s; cursor: pointer; flex-shrink: 0;
-        }
-        .switch-track::after {
-            content: ''; position: absolute; width: 20px; height: 20px;
-            background: #888; border-radius: 50%; top: 3px; left: 3px;
-            transition: transform 0.3s, background 0.3s;
-        }
-        .switch-track.on { background: #1a4a8a; }
-        .switch-track.on::after { transform: translateX(22px); background: #4ecca3; }
-
-        /* Time inputs */
-        .time-input { background: #0f3460; border: 1px solid #1a4a8a; border-radius: 6px; color: #eee; padding: 8px 10px; font-size: 14px; width: 100%; outline: none; }
+        /* Inputs & buttons */
+        .select, .text-input, .time-input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 16px; font-family: inherit; }
+        .time-input { background: var(--line); border-color: var(--line2); font-size: 14px; padding: 8px 10px; }
         .time-row { display: flex; gap: 12px; margin-top: 12px; }
         .time-col { flex: 1; }
-        .time-col label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold; font-family: inherit; }
+        .btn:disabled { opacity: 0.5; cursor: default; }
+        .btn-secondary { background: var(--line); color: var(--text); }
+        .btn-secondary:hover:not(:disabled) { background: var(--line2); }
+        .btn-reset { background: var(--line); color: var(--muted); }
+        .btn-reset:hover { background: var(--line2); color: var(--text); }
+        .btn-link { display: inline-block; text-decoration: none; }
+        .btn-tiny { padding: 4px 10px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; text-decoration: none; background: var(--line); color: var(--accent); font-family: inherit; }
+        .btn-tiny:hover { background: var(--line2); }
+        .btn-del { background: #3d1a1a; color: var(--danger); }
+        .btn-del:hover { background: #5d2a2a; }
+        .save-feedback { margin-left: 4px; color: var(--accent); font-size: 14px; opacity: 0; transition: opacity 0.3s; }
+        .check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; margin-top: 10px; }
+        .check input { width: 18px; height: 18px; cursor: pointer; }
 
-        /* Stat boxes */
+        /* Toggle switch */
+        .switch-track { width: 48px; height: 26px; background: var(--line); border-radius: 13px; position: relative; transition: background 0.3s; cursor: pointer; flex-shrink: 0; }
+        .switch-track::after { content: ''; position: absolute; width: 20px; height: 20px; background: #888; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.3s, background 0.3s; }
+        .switch-track.on { background: var(--line2); }
+        .switch-track.on::after { transform: translateX(22px); background: var(--accent); }
+
+        /* History */
+        .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .history-head h2 { margin-bottom: 0; }
+        .history-head select { width: auto; padding: 4px 8px; font-size: 13px; }
+        .history-list { max-height: 340px; overflow-y: auto; }
+        .history-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+        .history-item:last-child { border-bottom: none; }
+        .history-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 64px; }
+        .history-sound { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .history-meta { color: var(--dim); font-size: 12px; white-space: nowrap; }
+        .history-db { color: var(--danger); font-weight: bold; min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+        .history-empty { color: var(--dim); text-align: center; padding: 20px; }
+        .history-muted { opacity: 0.6; }
+        .tag-muted { color: var(--warn); font-size: 11px; }
+
+        /* Stats */
         .stat-boxes { display: flex; gap: 12px; margin-bottom: 16px; }
-        .stat-box { flex: 1; background: #0f3460; border-radius: 8px; padding: 12px; text-align: center; }
-        .stat-value { font-size: 28px; font-weight: bold; color: #4ecca3; }
-        .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
-        .chart-title { font-size: 12px; color: #888; margin-bottom: 8px; margin-top: 16px; }
+        .stat-box { flex: 1; background: var(--line); border-radius: 8px; padding: 12px; text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 12px; color: var(--dim); margin-top: 4px; }
+        .chart-title { font-size: 12px; color: var(--muted); margin: 16px 0 8px; }
+        .heatmap { display: grid; grid-template-columns: 30px repeat(24, 1fr); gap: 2px; }
+        .heatmap .cell { aspect-ratio: 1; border-radius: 2px; background: var(--line); min-height: 10px; }
+        .heatmap .lbl { font-size: 10px; color: var(--dim); display: flex; align-items: center; justify-content: center; }
+        .heatmap .row-lbl { justify-content: flex-start; }
 
         /* Recordings */
-        .recording-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; font-size: 13px; }
+        .recording-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
         .recording-item:last-child { border-bottom: none; }
-        .recording-name { color: #888; flex: 1; }
-        .recording-size { color: #666; margin: 0 12px; font-size: 12px; }
+        .recording-name { color: var(--muted); flex: 1; }
+        .recording-size { color: var(--dim); font-size: 12px; }
         .recording-actions { display: flex; gap: 6px; }
-        .btn-tiny { padding: 4px 10px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
-        .btn-play { background: #0f3460; color: #4ecca3; }
-        .btn-play:hover { background: #1a4a8a; }
-        .btn-del { background: #3d1a1a; color: #e23e57; }
-        .btn-del:hover { background: #5d2a2a; }
 
-        /* Limit bar */
-        .limit-bar-wrap { background: #0f3460; border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
-        .limit-bar { height: 100%; background: #4ecca3; border-radius: 4px; transition: width 0.3s; }
+        /* Misc */
+        .limit-bar-wrap { background: var(--line); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
+        .limit-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; }
+        .calibrate-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .calibrate-progress { flex: 1; min-width: 60px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; display: none; }
+        .calibrate-bar { height: 100%; background: var(--accent); width: 0%; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; flex-shrink: 0; }
+        .dot.ok { background: var(--accent); }
+        .status-line { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+        .device-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
+        .device-row .connected { color: var(--accent); }
+        .custom-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; font-size: 13px; color: var(--muted); }
 
-        /* Night badge */
-        .night-badge { display: inline-block; background: #1a3060; color: #4ecca3; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
-
-        /* Calibration */
-        .calibrate-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-        .calibrate-progress { flex: 1; height: 4px; background: #0f3460; border-radius: 2px; overflow: hidden; display: none; }
-        .calibrate-bar { height: 100%; background: #4ecca3; width: 0%; transition: width 0.1s linear; }
-
-        /* Row utils */
-        .row-between { display: flex; align-items: center; justify-content: space-between; }
+        /* Toast */
+        #toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center; width: calc(100% - 32px); max-width: 360px; pointer-events: none; }
+        .toast { background: var(--danger); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 16px rgba(0,0,0,0.4); animation: toast-in 0.2s ease-out; }
+        .toast.info { background: var(--line2); }
+        @keyframes toast-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
 
         @media (max-width: 600px) {
-            .status-row { flex-direction: column; gap: 16px; text-align: center; }
-            .slider-row label { min-width: 60px; }
+            .container { padding: 12px; }
+            .card { padding: 16px; }
+            .slider-row label { flex-basis: 92px; }
             .stat-boxes { flex-wrap: wrap; }
+            .stat-box { min-width: 90px; }
+            .tab-btn { padding: 10px 8px; font-size: 13px; }
+            .time-row { flex-direction: column; gap: 8px; }
+            .statusbar { gap: 8px; }
+            .history-meta { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .status-dot { animation: none; }
+            body.flash::before { animation-duration: 0.01s; }
         }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>NoisyNeighbors</h1>
-    <div class="subtitle">Noise Detection & Replay System</div>
-</div>
-
-<div class="tab-nav-wrap">
+<div class="topbar">
+    <div class="header">
+        <h1>NoisyNeighbors</h1>
+        <div class="conn" id="conn"><div class="conn-dot"></div><span id="connText">Connected</span></div>
+    </div>
+    <div class="statusbar">
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+            <span class="night-badge" id="nightBadge" style="display:none;">Night</span>
+        </div>
+        <div class="boom-count"><b id="boomCount">0</b><span>today</span></div>
+        <div class="menu-wrap">
+            <button class="toggle-btn off" id="pauseBtn" onclick="toggleMenu(event)">Pause &#9662;</button>
+            <div class="menu" id="pauseMenu">
+                <button onclick="pauseFor(30)">30 minutes</button>
+                <button onclick="pauseFor(60)">1 hour</button>
+                <button onclick="pauseFor(120)">2 hours</button>
+                <button onclick="pauseUntilTomorrow()">Until 08:00 tomorrow</button>
+            </div>
+        </div>
+        <button class="toggle-btn on" id="toggleBtn" onclick="toggleEnabled()">Disable</button>
+    </div>
     <nav class="tab-nav">
         <button class="tab-btn active" id="btn-live" onclick="switchTab('live')">📡 Live</button>
         <button class="tab-btn" id="btn-config" onclick="switchTab('config')">⚙️ Config</button>
@@ -187,57 +224,49 @@
         <button class="tab-btn" id="btn-stats" onclick="switchTab('stats')">📊 Stats</button>
     </nav>
 </div>
+<div class="banner" id="banner">Connection lost — reconnecting…</div>
+<div id="toasts"></div>
 
 <!-- TAB: LIVE -->
 <div class="tab-pane active" id="tab-live">
 <div class="container">
 
     <div class="card">
-        <h2>Status</h2>
-        <div class="status-row">
-            <div class="status-indicator">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Listening...</span>
-                <span class="night-badge" id="nightBadge" style="display:none;">Night</span>
-            </div>
-            <button class="toggle-btn on" id="toggleBtn" onclick="toggleEnabled()">Disable</button>
-            <div style="text-align: center;">
-                <div class="boom-count" id="boomCount">0</div>
-                <div class="boom-count-label">booms today</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
         <h2>Detection Level</h2>
+        <div class="vu-top">
+            <span class="vu-db" id="dbValue">-- dB</span>
+            <span class="vu-raw">RMS <span id="rmsValue">0.0000</span></span>
+        </div>
         <div class="vu-container">
             <div class="vu-bar" id="vuBar"></div>
             <div class="vu-threshold" id="vuThreshold"></div>
         </div>
-        <div class="vu-labels">
-            <span>0</span>
-            <span id="rmsValue">0.0000</span>
-            <span>1.0</span>
-        </div>
+        <div class="vu-labels"><span>-60 dB</span><span>-40</span><span>-20</span><span>0 dB</span></div>
+        <canvas id="sparkline" aria-label="Level over the last 60 seconds"></canvas>
+        <div class="vu-labels"><span>60 s ago</span><span>now</span></div>
         <div class="slider-row">
-            <label>Threshold</label>
+            <label for="threshold">Threshold</label>
             <input type="range" id="threshold" min="0.01" max="1" step="0.01" value="0.15">
             <span class="slider-value" id="thresholdValue">0.15</span>
         </div>
+        <div class="small" id="thresholdNote"></div>
         <div class="calibrate-row">
             <button class="btn btn-secondary" id="calibrateBtn" onclick="startCalibration()">Auto-calibrate (5s)</button>
-            <div class="calibrate-progress" id="calibrateProgress">
-                <div class="calibrate-bar" id="calibrateBar"></div>
-            </div>
-            <span id="calibrateFeedback" style="font-size: 13px; color: #4ecca3;"></span>
+            <div class="calibrate-progress" id="calibrateProgress"><div class="calibrate-bar" id="calibrateBar"></div></div>
+            <span id="calibrateFeedback" style="font-size: 13px; color: var(--accent);"></span>
         </div>
     </div>
 
     <div class="card">
-        <h2>History</h2>
-        <div class="history-list" id="historyList">
-            <div class="history-empty">No detections yet</div>
+        <div class="history-head">
+            <h2>History</h2>
+            <select class="select" id="historyFilter" onchange="renderHistory()" aria-label="Filter history">
+                <option value="all">All</option>
+                <option value="played">Answered</option>
+                <option value="muted">Muted</option>
+            </select>
         </div>
+        <div class="history-list" id="historyList"><div class="history-empty">No detections yet</div></div>
     </div>
 
 </div>
@@ -249,118 +278,156 @@
 
     <div class="card">
         <h2>Response Sound</h2>
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
-            <select class="sound-select" id="replayMode" onchange="setReplayMode(this.value)" style="flex: 1;"></select>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <select class="select" id="replayMode" onchange="setReplayMode(this.value)" style="flex: 1;" aria-label="Response sound"></select>
             <button class="btn btn-secondary" style="white-space: nowrap;" onclick="testSound()">Test</button>
+        </div>
+        <div class="slider-row" id="gainRow">
+            <label for="soundGain" id="gainLabel">Level</label>
+            <input type="range" id="soundGain" min="10" max="100" step="5" value="100">
+            <span class="slider-value" id="soundGainValue">100%</span>
+        </div>
+        <div class="small">Random picks a different sound each time. Escalate walks from gentle to loud on consecutive booms and resets after 10 quiet minutes.</div>
+        <div class="field">
+            <span class="field-label">Custom sounds (WAV, 16-bit, up to 30 s)</span>
+            <div class="btn-row" style="margin-top: 0;">
+                <input type="file" id="soundFile" accept=".wav,audio/wav" style="flex: 1; min-width: 0; font-size: 13px; color: var(--muted);">
+                <button class="btn btn-secondary" id="uploadBtn" onclick="uploadSound()">Upload</button>
+            </div>
+            <div class="small" id="uploadStatus"></div>
+            <div id="customList"></div>
         </div>
     </div>
 
     <div class="card">
-        <h2>Night Mode</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Lower threshold and different sound during night hours</p>
+        <h2>Detection</h2>
         <div class="row-between">
-            <span style="font-size: 14px; color: #888;">Enable night mode</span>
-            <div class="switch-track" id="nightModeTrack" onclick="toggleNightMode()"></div>
+            <span>Frequency filter (thumps &amp; bass only)</span>
+            <div class="switch-track" id="filterTrack" onclick="toggleFilter()" role="switch" aria-label="Frequency filter"></div>
         </div>
-        <div class="time-row">
-            <div class="time-col">
-                <label>Night starts</label>
-                <input type="time" class="time-input" id="nightStart" value="22:00" onchange="saveNightMode()">
-            </div>
-            <div class="time-col">
-                <label>Night ends</label>
-                <input type="time" class="time-input" id="nightEnd" value="08:00" onchange="saveNightMode()">
-            </div>
+        <div class="hint" style="margin-top: 8px; margin-bottom: 0;">Only measures the chosen band, so speech and TV trigger less. The level and threshold then refer to that band.</div>
+        <div class="slider-row">
+            <label for="filterLow">From</label>
+            <input type="range" id="filterLow" min="20" max="400" step="10" value="20">
+            <span class="slider-value" id="filterLowValue">20 Hz</span>
         </div>
         <div class="slider-row">
-            <label>Night threshold</label>
+            <label for="filterHigh">To</label>
+            <input type="range" id="filterHigh" min="60" max="2000" step="10" value="250">
+            <span class="slider-value" id="filterHighValue">250 Hz</span>
+        </div>
+        <div class="row-between" style="margin-top: 16px;">
+            <span>Adaptive threshold</span>
+            <div class="switch-track" id="adaptiveTrack" onclick="toggleAdaptive()" role="switch" aria-label="Adaptive threshold"></div>
+        </div>
+        <div class="hint" style="margin-top: 8px; margin-bottom: 0;">Raises the threshold automatically above steady background noise (fan, rain, traffic). It never goes below your threshold.</div>
+    </div>
+
+    <div class="card">
+        <h2>Night Mode</h2>
+        <div class="hint">Lower threshold and different sound during night hours</div>
+        <div class="row-between">
+            <span>Enable night mode</span>
+            <div class="switch-track" id="nightModeTrack" onclick="toggleNightMode()" role="switch" aria-label="Night mode"></div>
+        </div>
+        <div class="time-row">
+            <div class="time-col"><label class="field-label" for="nightStart">Night starts</label><input type="time" class="time-input" id="nightStart" value="22:00" onchange="saveNightMode()"></div>
+            <div class="time-col"><label class="field-label" for="nightEnd">Night ends</label><input type="time" class="time-input" id="nightEnd" value="08:00" onchange="saveNightMode()"></div>
+        </div>
+        <div class="slider-row">
+            <label for="nightThreshold">Night threshold</label>
             <input type="range" id="nightThreshold" min="0.01" max="1" step="0.01" value="0.10" oninput="document.getElementById('nightThresholdValue').textContent=parseFloat(this.value).toFixed(2)" onchange="saveNightMode()">
             <span class="slider-value" id="nightThresholdValue">0.10</span>
         </div>
-        <div style="margin-top: 12px;">
-            <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px;">Night response sound</label>
-            <select class="sound-select" id="nightReplayMode" onchange="saveNightMode()"></select>
+        <div class="field">
+            <label class="field-label" for="nightReplayMode">Night response sound</label>
+            <select class="select" id="nightReplayMode" onchange="saveNightMode()"></select>
         </div>
     </div>
 
     <div class="card">
         <h2>Scheduler</h2>
         <div class="row-between">
-            <span style="font-size: 14px; color: #888;">Auto-enable on schedule</span>
-            <div class="switch-track" id="scheduleTrack" onclick="toggleSchedule()"></div>
+            <span>Auto-enable on schedule</span>
+            <div class="switch-track" id="scheduleTrack" onclick="toggleSchedule()" role="switch" aria-label="Scheduler"></div>
         </div>
         <div class="time-row">
-            <div class="time-col">
-                <label>Enable at</label>
-                <input type="time" class="time-input" id="scheduleStart" value="22:00" onchange="saveSchedule()">
-            </div>
-            <div class="time-col">
-                <label>Disable at</label>
-                <input type="time" class="time-input" id="scheduleEnd" value="08:00" onchange="saveSchedule()">
-            </div>
+            <div class="time-col"><label class="field-label" for="scheduleStart">Enable at</label><input type="time" class="time-input" id="scheduleStart" value="22:00" onchange="saveSchedule()"></div>
+            <div class="time-col"><label class="field-label" for="scheduleEnd">Disable at</label><input type="time" class="time-input" id="scheduleEnd" value="08:00" onchange="saveSchedule()"></div>
         </div>
-        <div id="scheduleStatus" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+        <div class="small" id="scheduleStatus"></div>
     </div>
 
     <div class="card">
         <h2>Strike Mode</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Randomly fire sound and vibration without waiting for a boom</p>
+        <div class="hint">Randomly fire sound and vibration without waiting for a boom</div>
         <div class="row-between">
-            <span style="font-size: 14px; color: #888;">Enable Strike Mode</span>
-            <div class="switch-track" id="strikeModeTrack" onclick="toggleStrikeMode()"></div>
+            <span>Enable Strike Mode</span>
+            <div class="switch-track" id="strikeModeTrack" onclick="toggleStrikeMode()" role="switch" aria-label="Strike mode"></div>
         </div>
         <div class="slider-row">
-            <label>Min interval</label>
-            <input type="range" id="strikeMinInterval" min="10" max="600" step="10" value="60"
-                oninput="document.getElementById('strikeMinValue').textContent=this.value+'s'"
-                onchange="saveStrikeMode()">
+            <label for="strikeMinInterval">Min interval</label>
+            <input type="range" id="strikeMinInterval" min="10" max="600" step="10" value="60">
             <span class="slider-value" id="strikeMinValue">60s</span>
         </div>
         <div class="slider-row">
-            <label>Max interval</label>
-            <input type="range" id="strikeMaxInterval" min="10" max="3600" step="10" value="300"
-                oninput="document.getElementById('strikeMaxValue').textContent=this.value+'s'"
-                onchange="saveStrikeMode()">
+            <label for="strikeMaxInterval">Max interval</label>
+            <input type="range" id="strikeMaxInterval" min="10" max="3600" step="10" value="300">
             <span class="slider-value" id="strikeMaxValue">300s</span>
         </div>
-        <div id="strikeModeStatus" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+        <div class="small" id="strikeModeStatus"></div>
     </div>
 
     <div class="card">
         <h2>Rate Limiting</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Cap responses per hour to avoid an escalating cycle</p>
+        <div class="hint">Cap responses per hour to avoid an escalating cycle</div>
         <div class="slider-row">
-            <label>Max/hour</label>
-            <input type="range" id="maxBoomsPerHour" min="0" max="50" step="1" value="0" oninput="updateMaxBooms(this.value)" onchange="saveLimits()">
+            <label for="maxBoomsPerHour">Max/hour</label>
+            <input type="range" id="maxBoomsPerHour" min="0" max="50" step="1" value="0">
             <span class="slider-value" id="maxBoomsValue">&#8734;</span>
         </div>
-        <div style="margin-top: 10px; font-size: 12px; color: #666;">
-            This hour: <span id="hourlyCount">0</span><span id="hourlyLimitText"></span>
+        <div class="small">This hour: <span id="hourlyCount">0</span><span id="hourlyLimitText"></span></div>
+        <div class="limit-bar-wrap" id="limitBarWrap" style="display: none;"><div class="limit-bar" id="limitBar" style="width: 0%"></div></div>
+    </div>
+
+    <div class="card">
+        <h2>Notifications</h2>
+        <div class="hint">Get a push message on your phone (e.g. <a href="https://ntfy.sh" style="color: var(--accent);" target="_blank" rel="noopener">ntfy.sh</a>: pick a private topic URL like https://ntfy.sh/my-secret-topic). Boom alerts are limited to one per minute.</div>
+        <div class="row-between">
+            <span>Enable notifications</span>
+            <div class="switch-track" id="notifyTrack" onclick="toggleNotify()" role="switch" aria-label="Notifications"></div>
         </div>
-        <div class="limit-bar-wrap" id="limitBarWrap" style="display: none;">
-            <div class="limit-bar" id="limitBar" style="width: 0%"></div>
+        <div class="field">
+            <label class="field-label" for="notifyUrl">Topic URL</label>
+            <input type="url" class="text-input" id="notifyUrl" placeholder="https://ntfy.sh/my-secret-topic" onchange="saveNotify()">
         </div>
+        <label class="check"><input type="checkbox" id="notifyOnBoom" checked onchange="saveNotify()"> Notify on each boom</label>
+        <label class="check"><input type="checkbox" id="notifyOnLimit" checked onchange="saveNotify()"> Notify when the hourly limit is reached</label>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="testNotify()">Send test</button></div>
     </div>
 
     <div class="card">
         <h2>Settings</h2>
         <div class="slider-row">
-            <label>Cooldown</label>
+            <label for="cooldown_seconds">Cooldown</label>
             <input type="range" id="cooldown_seconds" min="0" max="30" step="1" value="5">
             <span class="slider-value" id="cooldownValue">5s</span>
         </div>
         <div class="slider-row">
-            <label>Pre-boom</label>
+            <label for="pre_boom_seconds">Pre-boom</label>
             <input type="range" id="pre_boom_seconds" min="0.1" max="5" step="0.1" value="1.0">
             <span class="slider-value" id="preBoomValue">1.0s</span>
         </div>
         <div class="slider-row">
-            <label>Post-boom</label>
+            <label for="post_boom_seconds">Post-boom</label>
             <input type="range" id="post_boom_seconds" min="0.1" max="5" step="0.1" value="1.5">
             <span class="slider-value" id="postBoomValue">1.5s</span>
         </div>
-        <button class="btn btn-reset" onclick="resetDefaults()">Reset Defaults</button>
-        <span class="save-feedback" id="saveFeedback">Saved!</span>
+        <div class="btn-row">
+            <button class="btn btn-reset" onclick="resetDefaults()">Reset Defaults</button>
+            <span class="save-feedback" id="saveFeedback">Saved!</span>
+        </div>
+        <div class="small" id="passwordNote"></div>
     </div>
 
 </div>
@@ -372,41 +439,32 @@
 
     <div class="card">
         <h2>Devices</h2>
-        <div style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px;">Input (mic)</label>
-            <select class="sound-select" id="inputDevice" onchange="setInputDevice(this.value)">
-                <option value="">Detecting...</option>
-            </select>
+        <div class="field" style="margin-top: 0;">
+            <label class="field-label" for="inputDevice">Input (mic)</label>
+            <select class="select" id="inputDevice" onchange="setInputDevice(this.value)"><option value="">Detecting...</option></select>
         </div>
-        <div style="margin-bottom: 12px;">
-            <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px;">Output (speaker)</label>
-            <select class="sound-select" id="alsaDevice" onchange="setAlsaDevice(this.value)">
-                <option value="">Detecting...</option>
-            </select>
+        <div class="field">
+            <label class="field-label" for="alsaDevice">Output (speaker)</label>
+            <select class="select" id="alsaDevice" onchange="setAlsaDevice(this.value)"><option value="">Detecting...</option></select>
         </div>
-        <div class="volume-row">
-            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="11" step="1" value="11">
-            <span class="volume-value" id="volumeValue">11</span>
+        <div class="slider-row">
+            <label for="volumeSlider">Volume</label>
+            <input type="range" id="volumeSlider" min="0" max="11" step="1" value="11">
+            <span class="slider-value" id="volumeValue">11</span>
         </div>
     </div>
 
     <div class="card">
         <h2>PS4 Controller</h2>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="ps4Dot" style="width: 10px; height: 10px; border-radius: 50%; background: #666;"></div>
-                <span id="ps4Status" style="font-size: 14px; color: #888;">Not connected</span>
-            </div>
+        <div class="row-between" style="flex-wrap: wrap;">
+            <div class="status-line"><div class="dot" id="ps4Dot"></div><span id="ps4Status">Not connected</span></div>
             <div style="display: flex; align-items: center; gap: 10px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <span style="font-size: 14px; color: #888;">Vibrate on boom</span>
-                    <input type="checkbox" id="ps4Toggle" onchange="togglePs4(this.checked)" style="width: 18px; height: 18px; cursor: pointer;">
-                </label>
+                <label class="check" style="margin-top: 0;"><span>Vibrate on boom</span><input type="checkbox" id="ps4Toggle" onchange="togglePs4(this.checked)"></label>
                 <button class="btn btn-secondary" onclick="testVibration()">Test</button>
             </div>
         </div>
         <div class="slider-row" id="vibrationRow" style="display: none;">
-            <label>Intensity</label>
+            <label for="vibrationIntensity">Intensity</label>
             <input type="range" id="vibrationIntensity" min="10" max="100" step="10" value="100">
             <span class="slider-value" id="vibrationValue">100%</span>
         </div>
@@ -414,19 +472,16 @@
 
     <div class="card">
         <h2>Bluetooth Speaker</h2>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Pair a Bluetooth speaker here, then pick it in the Output dropdown above to route sound there instead of the main output</p>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <div id="btDot" style="width: 10px; height: 10px; border-radius: 50%; background: #666;"></div>
-            <span id="btStatusText" style="font-size: 14px; color: #888;">Not connected</span>
+        <div class="hint">Pair a Bluetooth speaker here, then pick it in the Output dropdown above to route sound there instead of the main output</div>
+        <div class="status-line"><div class="dot" id="btDot"></div><span id="btStatusText">Not connected</span></div>
+        <span class="field-label" style="margin-top: 14px;">Paired speakers</span>
+        <div id="btPairedList"></div>
+        <div class="btn-row">
+            <button class="btn btn-secondary" id="btScanBtn" onclick="btScan()">Scan for speakers</button>
+            <button class="btn btn-secondary" id="btRestartBtn" onclick="btRestartAdapter()">Restart Bluetooth</button>
         </div>
-
-        <div style="font-size: 12px; color: #888; margin-top: 14px; margin-bottom: 4px;">Paired speakers</div>
-        <div id="btPairedList" style="font-size: 13px;"></div>
-
-        <button class="btn btn-secondary" style="margin-top: 12px;" id="btScanBtn" onclick="btScan()">Scan for speakers</button>
-        <button class="btn btn-secondary" style="margin-top: 12px; margin-left: 6px;" id="btRestartBtn" onclick="btRestartAdapter()">Restart Bluetooth</button>
-        <div id="btScanStatus" style="font-size: 12px; color: #666; margin-top: 6px;"></div>
-        <div id="btScanList" style="font-size: 13px; margin-top: 4px;"></div>
+        <div class="small" id="btScanStatus"></div>
+        <div id="btScanList"></div>
     </div>
 
 </div>
@@ -439,18 +494,9 @@
     <div class="card">
         <h2>Statistics</h2>
         <div class="stat-boxes">
-            <div class="stat-box">
-                <div class="stat-value" id="statToday">0</div>
-                <div class="stat-label">Today</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value" id="statWeek">0</div>
-                <div class="stat-label">This week</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value" id="statTotal">0</div>
-                <div class="stat-label">All time</div>
-            </div>
+            <div class="stat-box"><div class="stat-value" id="statToday">0</div><div class="stat-label">Today</div></div>
+            <div class="stat-box"><div class="stat-value" id="statWeek">0</div><div class="stat-label">This week</div></div>
+            <div class="stat-box"><div class="stat-value" id="statTotal">0</div><div class="stat-label">All time</div></div>
         </div>
         <div class="chart-title">Booms per hour (last 24h)</div>
         <canvas id="hourlyChart" height="100"></canvas>
@@ -459,327 +505,457 @@
     </div>
 
     <div class="card">
+        <h2>When it happens</h2>
+        <div class="hint">Booms by weekday and hour, last 28 days</div>
+        <div class="heatmap" id="heatmap"></div>
+    </div>
+
+    <div class="card">
+        <h2>Export &amp; Report</h2>
+        <div class="hint">A dated log of every detection, to share with your landlord or building manager. In the report, use your browser's Print &rarr; Save as PDF.</div>
+        <label class="field-label" for="exportDays">Period</label>
+        <select class="select" id="exportDays">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="0">Everything</option>
+        </select>
+        <div class="btn-row">
+            <a class="btn btn-secondary btn-link" id="reportLink" href="/report?days=30" target="_blank" rel="noopener">Open report</a>
+            <a class="btn btn-secondary btn-link" id="csvLink" href="/history.csv?days=30" download>Download CSV</a>
+        </div>
+    </div>
+
+    <div class="card">
         <h2>Recordings</h2>
         <div class="row-between" style="margin-bottom: 12px;">
-            <span style="font-size: 14px; color: #888;">Save boom audio clips</span>
-            <div class="switch-track" id="saveRecordingsTrack" onclick="toggleSaveRecordings()"></div>
+            <span>Save boom audio clips</span>
+            <div class="switch-track" id="saveRecordingsTrack" onclick="toggleSaveRecordings()" role="switch" aria-label="Save recordings"></div>
         </div>
-        <div id="recordingsList">
-            <div class="history-empty">No recordings yet</div>
-        </div>
-        <div style="margin-top: 8px; font-size: 12px; color: #666;" id="recordingsHint"></div>
+        <div id="recordingsList"><div class="history-empty">No recordings yet</div></div>
+        <div class="small" id="recordingsHint"></div>
     </div>
 
 </div>
 </div>
 
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+{% raw %}
 <script>
 const socket = io();
-let threshold = 0.15;
-let scheduleEnabled = false;
-let nightModeEnabled = false;
-let strikeModeEnabled = false;
-let saveRecordingsEnabled = false;
-let btPairedDevices = [];
-let btConnectedMac = null;
-let maxBoomsPerHour = 0;
-let hourlyCount = 0;
-let chartsReady = false;
-let hourlyChart, dailyChart;
+const SOUND_LABELS = {
+    echo: 'Echo (replay the boom)', alarm: 'Alarm', doorbell: 'Doorbell', hammer: 'Hammer',
+    honk: 'Honk', siren: 'Siren', sandstorm: 'Sandstorm', hammering: 'Hammering',
+    random: 'Random', escalate: 'Escalate (gentle to loud)'
+};
+const DB_MIN = -60;
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// ---- Tab navigation ----
+let threshold = 0.15;          // user-set threshold (slider)
+let liveThreshold = 0.15;      // effective threshold reported by the server
+let scheduleEnabled = false, nightModeEnabled = false, strikeModeEnabled = false;
+let saveRecordingsEnabled = false, filterEnabled = false, adaptiveEnabled = false, notifyEnabled = false;
+let btPairedDevices = [], btConnectedMac = null;
+let maxBoomsPerHour = 0, hourlyCount = 0;
+let chartsReady = false, hourlyChart, dailyChart;
+let enabled = true, statusState = 'listening', pauseUntil = null;
+let historyItems = [];
+let customSounds = [], soundGains = {}, currentMode = 'echo';
+
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+}
+function soundLabel(s) { return SOUND_LABELS[s] || (customSounds.indexOf(s) >= 0 ? s + ' (custom)' : s); }
+function toDb(level) { return 20 * Math.log10(Math.max(level, 1e-6)); }
+function dbPct(db) { return Math.max(0, Math.min(100, (db - DB_MIN) / -DB_MIN * 100)); }
+function fmtDb(level) { return toDb(level).toFixed(0) + ' dB'; }
+function tryStore(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function tryLoad(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+// ---- Tabs ----
 function switchTab(name) {
-    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
-    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-    document.getElementById('tab-' + name).classList.add('active');
-    document.getElementById('btn-' + name).classList.add('active');
-    localStorage.setItem('activeTab', name);
-    if (name === 'stats' && !chartsReady) {
-        initCharts();
-        socket.emit('get_stats');
-    }
-    if (name === 'stats') setTimeout(function() { if (hourlyChart) hourlyChart.resize(); if (dailyChart) dailyChart.resize(); }, 50);
+    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    $('tab-' + name).classList.add('active');
+    $('btn-' + name).classList.add('active');
+    tryStore('activeTab', name);
+    if (name === 'stats' && !chartsReady) { initCharts(); socket.emit('get_stats'); }
+    if (name === 'stats') setTimeout(() => { if (hourlyChart) hourlyChart.resize(); if (dailyChart) dailyChart.resize(); }, 50);
+    if (name === 'live') drawSparkline();
 }
 
-// Restore last tab
-(function() {
-    var t = localStorage.getItem('activeTab') || 'live';
-    switchTab(t);
-})();
+// ---- Connection state ----
+function setConn(ok, text) {
+    $('conn').classList.toggle('lost', !ok);
+    $('connText').textContent = ok ? 'Connected' : (text || 'Disconnected');
+    $('banner').classList.toggle('show', !ok);
+    if (!ok) $('banner').textContent = text === 'Unauthorized' ? 'Not authorised — check the dashboard password' : 'Connection lost — reconnecting…';
+}
+socket.on('connect', () => setConn(true));
+socket.on('disconnect', () => setConn(false));
+socket.on('connect_error', () => setConn(false));
+
+// ---- Toasts ----
+function toast(msg, info) {
+    const t = el('div', 'toast' + (info ? ' info' : ''), msg);
+    $('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+}
 
 // ---- Charts ----
 function initCharts() {
     chartsReady = true;
-    var opts = {
+    const opts = () => ({
         responsive: true,
         plugins: { legend: { display: false } },
         scales: {
-            y: { beginAtZero: true, ticks: { color: '#888', stepSize: 1 }, grid: { color: '#0f3460' } },
-            x: { ticks: { color: '#888', maxRotation: 45, font: { size: 10 } }, grid: { color: '#0f3460' } }
+            y: { beginAtZero: true, ticks: { color: '#9aa0b4', stepSize: 1 }, grid: { color: '#0f3460' } },
+            x: { ticks: { color: '#9aa0b4', maxRotation: 45, font: { size: 10 } }, grid: { color: '#0f3460' } }
         }
-    };
-    hourlyChart = new Chart(document.getElementById('hourlyChart'), {
-        type: 'bar',
-        data: { labels: [], datasets: [{ data: [], backgroundColor: '#e23e57', borderRadius: 3 }] },
-        options: JSON.parse(JSON.stringify(opts))
     });
-    dailyChart = new Chart(document.getElementById('dailyChart'), {
-        type: 'bar',
-        data: { labels: [], datasets: [{ data: [], backgroundColor: '#4ecca3', borderRadius: 3 }] },
-        options: JSON.parse(JSON.stringify(opts))
-    });
+    hourlyChart = new Chart($('hourlyChart'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: '#e23e57', borderRadius: 3 }] }, options: opts() });
+    dailyChart = new Chart($('dailyChart'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: '#4ecca3', borderRadius: 3 }] }, options: opts() });
 }
+
+// ---- VU meter + sparkline ----
+const trail = [];        // {t, level}
+const boomMarks = [];    // timestamps
+const TRAIL_MS = 60000;
+
+function updateThresholdLine() {
+    $('vuThreshold').style.left = dbPct(toDb(liveThreshold)) + '%';
+    const note = $('thresholdNote');
+    note.textContent = (liveThreshold > threshold + 0.0005)
+        ? 'Adaptive: currently ' + liveThreshold.toFixed(3) + ' (' + fmtDb(liveThreshold) + ') because of background noise'
+        : 'Detects above ' + fmtDb(threshold);
+}
+
+function drawSparkline() {
+    const c = $('sparkline');
+    if (!c.offsetWidth) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.offsetWidth, h = c.offsetHeight;
+    if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const now = Date.now();
+    const x = (t) => w - (now - t) / TRAIL_MS * w;
+    const y = (level) => h - dbPct(toDb(level)) / 100 * h;
+    // threshold
+    g.strokeStyle = 'rgba(255,255,255,0.6)'; g.setLineDash([4, 4]); g.beginPath();
+    g.moveTo(0, y(liveThreshold)); g.lineTo(w, y(liveThreshold)); g.stroke(); g.setLineDash([]);
+    // boom markers
+    g.fillStyle = 'rgba(226,62,87,0.35)';
+    boomMarks.forEach((t) => { if (now - t < TRAIL_MS) g.fillRect(x(t) - 1, 0, 3, h); });
+    // level line
+    g.strokeStyle = '#4ecca3'; g.lineWidth = 1.5; g.beginPath();
+    let started = false;
+    trail.forEach((p) => { const px = x(p.t), py = y(p.level); if (!started) { g.moveTo(px, py); started = true; } else g.lineTo(px, py); });
+    g.stroke();
+}
+setInterval(drawSparkline, 500);
+window.addEventListener('resize', drawSparkline);
+
+socket.on('rms', (data) => {
+    const db = toDb(data.level);
+    $('vuBar').style.width = (100 - dbPct(db)) + '%';
+    $('rmsValue').textContent = data.level.toFixed(4);
+    $('dbValue').textContent = db <= DB_MIN ? '-- dB' : db.toFixed(0) + ' dB';
+    if (data.threshold) { liveThreshold = data.threshold; updateThresholdLine(); }
+    const now = Date.now();
+    trail.push({ t: now, level: data.level });
+    while (trail.length && now - trail[0].t > TRAIL_MS) trail.shift();
+    while (boomMarks.length && now - boomMarks[0] > TRAIL_MS) boomMarks.shift();
+});
 
 // ---- Threshold ----
-function updateThresholdLine() {
-    document.getElementById('vuThreshold').style.left = (threshold * 100) + '%';
-}
-
-document.getElementById('threshold').addEventListener('input', function() {
-    threshold = parseFloat(this.value);
-    document.getElementById('thresholdValue').textContent = threshold.toFixed(2);
+$('threshold').addEventListener('input', function () {
+    threshold = liveThreshold = parseFloat(this.value);
+    $('thresholdValue').textContent = threshold.toFixed(2);
     updateThresholdLine();
 });
-document.getElementById('threshold').addEventListener('change', function() { saveSettings(); });
+$('threshold').addEventListener('change', () => saveSettings());
 
 // ---- Calibration ----
 function startCalibration() {
     socket.emit('calibrate_threshold');
-    document.getElementById('calibrateBtn').disabled = true;
-    document.getElementById('calibrateFeedback').textContent = 'Measuring...';
-    document.getElementById('calibrateProgress').style.display = 'block';
-    var bar = document.getElementById('calibrateBar');
+    $('calibrateBtn').disabled = true;
+    $('calibrateFeedback').textContent = 'Measuring... stay quiet';
+    $('calibrateProgress').style.display = 'block';
+    const bar = $('calibrateBar');
     bar.style.transition = 'none'; bar.style.width = '0%';
-    setTimeout(function() { bar.style.transition = 'width 5s linear'; bar.style.width = '100%'; }, 50);
+    setTimeout(() => { bar.style.transition = 'width 5s linear'; bar.style.width = '100%'; }, 50);
 }
-
-socket.on('calibration_done', function(data) {
-    document.getElementById('calibrateBtn').disabled = false;
-    document.getElementById('calibrateProgress').style.display = 'none';
-    document.getElementById('calibrateBar').style.width = '0%';
-    if (data.error) { document.getElementById('calibrateFeedback').textContent = 'Error: ' + data.error; return; }
-    threshold = data.threshold;
-    document.getElementById('threshold').value = threshold;
-    document.getElementById('thresholdValue').textContent = threshold.toFixed(4);
+socket.on('calibration_done', (data) => {
+    $('calibrateBtn').disabled = false;
+    $('calibrateProgress').style.display = 'none';
+    $('calibrateBar').style.width = '0%';
+    if (data.error) { $('calibrateFeedback').textContent = 'Error: ' + data.error; return; }
+    threshold = liveThreshold = data.threshold;
+    $('threshold').value = threshold;
+    $('thresholdValue').textContent = threshold.toFixed(2);
     updateThresholdLine();
-    document.getElementById('calibrateFeedback').textContent = '→ ' + threshold.toFixed(4);
-    setTimeout(function() { document.getElementById('calibrateFeedback').textContent = ''; }, 3000);
+    $('calibrateFeedback').textContent = '→ ' + threshold.toFixed(4);
+    setTimeout(() => { $('calibrateFeedback').textContent = ''; }, 3000);
 });
 
 // ---- Settings ----
 function showSaved() {
-    var fb = document.getElementById('saveFeedback');
+    const fb = $('saveFeedback');
     fb.style.opacity = 1;
-    setTimeout(function() { fb.style.opacity = 0; }, 1500);
+    setTimeout(() => { fb.style.opacity = 0; }, 1500);
 }
-
 function saveSettings() {
-    var t = parseFloat(document.getElementById('threshold').value);
-    var cd = parseInt(document.getElementById('cooldown_seconds').value);
-    var pre = parseFloat(document.getElementById('pre_boom_seconds').value);
-    var post = parseFloat(document.getElementById('post_boom_seconds').value);
-    if (isNaN(t) || isNaN(cd) || isNaN(pre) || isNaN(post)) return;
+    const t = parseFloat($('threshold').value), cd = parseInt($('cooldown_seconds').value);
+    const pre = parseFloat($('pre_boom_seconds').value), post = parseFloat($('post_boom_seconds').value);
+    if ([t, cd, pre, post].some(isNaN)) return;
     threshold = t; updateThresholdLine();
     socket.emit('save_config', { threshold: t, cooldown_seconds: cd, pre_boom_seconds: pre, post_boom_seconds: post });
     showSaved();
 }
-
-document.getElementById('cooldown_seconds').addEventListener('input', function() { document.getElementById('cooldownValue').textContent = this.value + 's'; });
-document.getElementById('cooldown_seconds').addEventListener('change', saveSettings);
-document.getElementById('pre_boom_seconds').addEventListener('input', function() { document.getElementById('preBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's'; });
-document.getElementById('pre_boom_seconds').addEventListener('change', saveSettings);
-document.getElementById('post_boom_seconds').addEventListener('input', function() { document.getElementById('postBoomValue').textContent = parseFloat(this.value).toFixed(1) + 's'; });
-document.getElementById('post_boom_seconds').addEventListener('change', saveSettings);
-
+function bindSlider(id, labelId, fmt, onChange) {
+    const s = $(id);
+    s.addEventListener('input', () => { $(labelId).textContent = fmt(s.value); });
+    if (onChange) s.addEventListener('change', onChange);
+}
+bindSlider('cooldown_seconds', 'cooldownValue', (v) => v + 's', saveSettings);
+bindSlider('pre_boom_seconds', 'preBoomValue', (v) => parseFloat(v).toFixed(1) + 's', saveSettings);
+bindSlider('post_boom_seconds', 'postBoomValue', (v) => parseFloat(v).toFixed(1) + 's', saveSettings);
 function resetDefaults() {
-    document.getElementById('threshold').value = 0.15;
-    document.getElementById('thresholdValue').textContent = '0.15';
-    document.getElementById('cooldown_seconds').value = 5;
-    document.getElementById('cooldownValue').textContent = '5s';
-    document.getElementById('pre_boom_seconds').value = 1.0;
-    document.getElementById('preBoomValue').textContent = '1.0s';
-    document.getElementById('post_boom_seconds').value = 1.5;
-    document.getElementById('postBoomValue').textContent = '1.5s';
-    threshold = 0.15; updateThresholdLine(); saveSettings();
+    $('threshold').value = 0.15; $('thresholdValue').textContent = '0.15';
+    $('cooldown_seconds').value = 5; $('cooldownValue').textContent = '5s';
+    $('pre_boom_seconds').value = 1.0; $('preBoomValue').textContent = '1.0s';
+    $('post_boom_seconds').value = 1.5; $('postBoomValue').textContent = '1.5s';
+    threshold = liveThreshold = 0.15; saveSettings();
 }
 
-// ---- RMS / Status ----
-socket.on('rms', function(data) {
-    var pct = Math.min(data.level * 100 / 0.5, 100);
-    document.getElementById('vuBar').style.width = pct + '%';
-    document.getElementById('rmsValue').textContent = data.level.toFixed(4);
-});
-
-socket.on('status', function(data) {
-    var dot = document.getElementById('statusDot');
-    var text = document.getElementById('statusText');
+// ---- Status bar / pause ----
+function fmtClock(ms) { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function renderStatus() {
+    const dot = $('statusDot'), text = $('statusText');
     dot.className = 'status-dot';
-    if (data.state === 'disabled') { dot.classList.add('disabled'); text.textContent = 'Disabled'; }
-    else if (data.state === 'boom') { dot.classList.add('boom'); text.textContent = 'BOOM detected!'; }
-    else if (data.state === 'cooldown') { dot.classList.add('cooldown'); text.textContent = 'Cooldown...'; }
+    if (!enabled) {
+        dot.classList.add('disabled');
+        text.textContent = pauseUntil ? 'Paused until ' + fmtClock(pauseUntil) : 'Disabled';
+    } else if (statusState === 'boom') { dot.classList.add('boom'); text.textContent = 'BOOM detected!'; }
+    else if (statusState === 'cooldown') { dot.classList.add('cooldown'); text.textContent = 'Cooldown...'; }
     else { text.textContent = 'Listening...'; }
+    const btn = $('toggleBtn');
+    btn.className = 'toggle-btn ' + (enabled ? 'on' : 'off');
+    btn.textContent = enabled ? 'Disable' : 'Enable';
+    $('pauseBtn').style.display = enabled ? '' : 'none';
     updateNightBadge();
-});
+}
+socket.on('status', (data) => { statusState = data.state; if (data.state === 'disabled') enabled = false; renderStatus(); });
+socket.on('enabled_state', (data) => { enabled = data.enabled; renderStatus(); });
+socket.on('pause_state', (data) => { pauseUntil = data.until; renderStatus(); });
+function toggleEnabled() { socket.emit('toggle_enabled'); }
+function toggleMenu(ev) { ev.stopPropagation(); $('pauseMenu').classList.toggle('open'); }
+document.addEventListener('click', () => $('pauseMenu').classList.remove('open'));
+function pauseFor(minutes) { socket.emit('pause_for', { minutes: minutes }); }
+function pauseUntilTomorrow() { socket.emit('pause_for', { until: 'tomorrow' }); }
+setInterval(renderStatus, 30000);
 
 function updateNightBadge() {
-    if (!nightModeEnabled) { document.getElementById('nightBadge').style.display = 'none'; return; }
-    var start = document.getElementById('nightStart').value;
-    var end = document.getElementById('nightEnd').value;
-    var now = new Date();
-    var cur = now.getHours() * 60 + now.getMinutes();
-    var s = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1]);
-    var e = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]);
-    var active = s <= e ? (cur >= s && cur <= e) : (cur >= s || cur <= e);
-    document.getElementById('nightBadge').style.display = active ? 'inline-block' : 'none';
+    const badge = $('nightBadge');
+    if (!nightModeEnabled) { badge.style.display = 'none'; return; }
+    const mins = (v) => parseInt(v.split(':')[0]) * 60 + parseInt(v.split(':')[1]);
+    const now = new Date(), cur = now.getHours() * 60 + now.getMinutes();
+    const s = mins($('nightStart').value), e = mins($('nightEnd').value);
+    const active = s <= e ? (cur >= s && cur <= e) : (cur >= s || cur <= e);
+    badge.style.display = active ? 'inline-block' : 'none';
 }
 
-// ---- Enable/Disable ----
-socket.on('enabled_state', function(data) {
-    var btn = document.getElementById('toggleBtn');
-    if (data.enabled) { btn.className = 'toggle-btn on'; btn.textContent = 'Disable'; }
-    else { btn.className = 'toggle-btn off'; btn.textContent = 'Enable'; }
-});
-function toggleEnabled() { socket.emit('toggle_enabled'); }
-
-// ---- Replay mode ----
-var soundLabels = { echo: 'Echo (replay the boom)', alarm: 'Alarm', doorbell: 'Doorbell', hammer: 'Hammer', honk: 'Honk', siren: 'Siren' };
-
-socket.on('replay_mode', function(data) {
-    ['replayMode', 'nightReplayMode'].forEach(function(id) {
-        var sel = document.getElementById(id);
-        var cur = sel.value;
-        sel.innerHTML = '';
-        data.available.forEach(function(s) {
-            var opt = document.createElement('option');
-            opt.value = s; opt.textContent = soundLabels[s] || s;
-            if ((id === 'replayMode' && s === data.mode) || (id !== 'replayMode' && s === cur)) opt.selected = true;
-            sel.appendChild(opt);
-        });
+// ---- Replay mode / custom sounds ----
+function fillSoundSelect(id, available, selected) {
+    const sel = $(id);
+    sel.innerHTML = '';
+    available.forEach((s) => {
+        const opt = el('option', '', soundLabel(s));
+        opt.value = s;
+        if (s === selected) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+function renderGain() {
+    const concrete = currentMode !== 'random' && currentMode !== 'escalate';
+    $('gainRow').style.display = concrete ? 'flex' : 'none';
+    if (!concrete) return;
+    const g = Math.round((soundGains[currentMode] === undefined ? 1 : soundGains[currentMode]) * 100);
+    $('soundGain').value = g;
+    $('soundGainValue').textContent = g + '%';
+    $('gainLabel').textContent = 'Level';
+}
+socket.on('replay_mode', (data) => {
+    customSounds = data.custom || [];
+    soundGains = data.gains || {};
+    currentMode = data.mode;
+    fillSoundSelect('replayMode', data.available, data.mode);
+    fillSoundSelect('nightReplayMode', data.available, data.night_mode);
+    renderGain();
+    const list = $('customList');
+    list.innerHTML = '';
+    customSounds.forEach((name) => {
+        const row = el('div', 'custom-row');
+        row.appendChild(el('span', '', name));
+        const del = el('button', 'btn-tiny btn-del', '×');
+        del.title = 'Delete ' + name;
+        del.onclick = () => { if (confirm('Delete sound "' + name + '"?')) socket.emit('delete_custom_sound', { name: name }); };
+        row.appendChild(del);
+        list.appendChild(row);
     });
 });
-
-function setReplayMode(mode) { socket.emit('set_replay_mode', { mode: mode }); }
+function setReplayMode(mode) { currentMode = mode; renderGain(); socket.emit('set_replay_mode', { mode: mode }); }
 function testSound() { socket.emit('test_sound'); }
 function testVibration() { socket.emit('test_vibration'); }
+$('soundGain').addEventListener('input', function () { $('soundGainValue').textContent = this.value + '%'; });
+$('soundGain').addEventListener('change', function () { socket.emit('set_sound_gain', { name: currentMode, gain: this.value / 100 }); });
+
+function uploadSound() {
+    const f = $('soundFile').files[0];
+    const status = $('uploadStatus');
+    if (!f) { status.textContent = 'Choose a WAV file first.'; return; }
+    const fd = new FormData();
+    fd.append('file', f);
+    $('uploadBtn').disabled = true;
+    status.textContent = 'Uploading...';
+    fetch('/sounds/upload', { method: 'POST', body: fd })
+        .then((r) => r.json())
+        .then((res) => {
+            status.textContent = res.ok ? 'Added "' + res.name + '"' : 'Failed: ' + res.error;
+            if (res.ok) $('soundFile').value = '';
+        })
+        .catch(() => { status.textContent = 'Upload failed (file too large or connection lost).'; })
+        .then(() => { $('uploadBtn').disabled = false; });
+}
 
 // ---- PS4 ----
-socket.on('ps4_status', function(data) {
-    document.getElementById('ps4Dot').style.background = data.connected ? '#4ecca3' : '#666';
-    document.getElementById('ps4Status').textContent = data.connected ? 'Connected' : 'Not connected';
-    document.getElementById('ps4Toggle').checked = data.enabled;
-    document.getElementById('vibrationRow').style.display = data.enabled ? 'flex' : 'none';
-    document.getElementById('vibrationIntensity').value = data.intensity;
-    document.getElementById('vibrationValue').textContent = data.intensity + '%';
+socket.on('ps4_status', (data) => {
+    $('ps4Dot').classList.toggle('ok', data.connected);
+    $('ps4Status').textContent = data.connected ? 'Connected' : 'Not connected';
+    $('ps4Toggle').checked = data.enabled;
+    $('vibrationRow').style.display = data.enabled ? 'flex' : 'none';
+    $('vibrationIntensity').value = data.intensity;
+    $('vibrationValue').textContent = data.intensity + '%';
 });
-function togglePs4(enabled) {
-    socket.emit('toggle_ps4_vibration', { enabled: enabled });
-    document.getElementById('vibrationRow').style.display = enabled ? 'flex' : 'none';
+function togglePs4(on) {
+    socket.emit('toggle_ps4_vibration', { enabled: on });
+    $('vibrationRow').style.display = on ? 'flex' : 'none';
 }
-document.getElementById('vibrationIntensity').addEventListener('input', function() { document.getElementById('vibrationValue').textContent = this.value + '%'; });
-document.getElementById('vibrationIntensity').addEventListener('change', function() { socket.emit('set_vibration_intensity', { intensity: parseInt(this.value) }); });
+bindSlider('vibrationIntensity', 'vibrationValue', (v) => v + '%', function () { socket.emit('set_vibration_intensity', { intensity: parseInt($('vibrationIntensity').value) }); });
 
 // ---- Devices ----
-socket.on('input_devices', function(data) {
-    var sel = document.getElementById('inputDevice');
+socket.on('input_devices', (data) => {
+    const sel = $('inputDevice');
     sel.innerHTML = '';
-    data.devices.forEach(function(d) {
-        var opt = document.createElement('option');
-        opt.value = d.id; opt.textContent = d.name;
-        if (d.id === data.current) opt.selected = true;
-        sel.appendChild(opt);
-    });
+    data.devices.forEach((d) => { const o = el('option', '', d.name); o.value = d.id; if (d.id === data.current) o.selected = true; sel.appendChild(o); });
 });
 function setInputDevice(device) { socket.emit('set_input_device', { device: parseInt(device) }); }
-
-socket.on('alsa_devices', function(data) {
-    var sel = document.getElementById('alsaDevice');
+socket.on('alsa_devices', (data) => {
+    const sel = $('alsaDevice');
     sel.innerHTML = '';
-    data.devices.forEach(function(d) {
-        var opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.id === 'bluetooth' ? (d.name + ' (Bluetooth)') : (d.name + ' (' + d.id + ')');
-        if (d.id === data.current) opt.selected = true;
-        sel.appendChild(opt);
+    data.devices.forEach((d) => {
+        const o = el('option', '', d.id === 'bluetooth' ? d.name + ' (Bluetooth)' : d.name + ' (' + d.id + ')');
+        o.value = d.id; if (d.id === data.current) o.selected = true; sel.appendChild(o);
     });
 });
 function setAlsaDevice(device) { socket.emit('set_alsa_device', { device: device }); }
-
-document.getElementById('volumeSlider').addEventListener('input', function() {
-    document.getElementById('volumeValue').textContent = this.value;
-});
-document.getElementById('volumeSlider').addEventListener('change', function() {
-    socket.emit('set_volume', { level: parseInt(this.value) });
-});
-socket.on('volume', function(data) {
-    document.getElementById('volumeSlider').value = data.level;
-    document.getElementById('volumeSlider').max = data.max;
-    document.getElementById('volumeValue').textContent = data.level;
+bindSlider('volumeSlider', 'volumeValue', (v) => v, function () { socket.emit('set_volume', { level: parseInt($('volumeSlider').value) }); });
+socket.on('volume', (data) => {
+    $('volumeSlider').max = data.max;
+    $('volumeSlider').value = data.level;
+    $('volumeValue').textContent = data.level;
 });
 
-// ---- Toggle switch helper ----
-function setTrack(id, on) {
-    var t = document.getElementById(id);
-    if (on) t.classList.add('on'); else t.classList.remove('on');
-}
+// ---- Toggle helper ----
+function setTrack(id, on) { $(id).classList.toggle('on', !!on); $(id).setAttribute('aria-checked', !!on); }
 
-// ---- Scheduler ----
-function toggleSchedule() { scheduleEnabled = !scheduleEnabled; setTrack('scheduleTrack', scheduleEnabled); saveSchedule(); }
-function saveSchedule() {
-    socket.emit('save_schedule', { enabled: scheduleEnabled, start: document.getElementById('scheduleStart').value, end: document.getElementById('scheduleEnd').value });
-    document.getElementById('scheduleStatus').textContent = scheduleEnabled
-        ? 'Active: ' + document.getElementById('scheduleStart').value + ' → ' + document.getElementById('scheduleEnd').value + ' (checks every 30s)'
-        : '';
-}
-
-// ---- Night Mode ----
-function toggleNightMode() { nightModeEnabled = !nightModeEnabled; setTrack('nightModeTrack', nightModeEnabled); saveNightMode(); updateNightBadge(); }
-function saveNightMode() {
-    socket.emit('save_night_mode', {
-        enabled: nightModeEnabled,
-        start: document.getElementById('nightStart').value,
-        end: document.getElementById('nightEnd').value,
-        threshold: parseFloat(document.getElementById('nightThreshold').value),
-        replay_mode: document.getElementById('nightReplayMode').value,
+// ---- Detection (filter / adaptive) ----
+function saveDetection() {
+    socket.emit('save_detection', {
+        filter_enabled: filterEnabled,
+        filter_low_hz: parseFloat($('filterLow').value),
+        filter_high_hz: parseFloat($('filterHigh').value),
+        adaptive_threshold: adaptiveEnabled
     });
 }
+function toggleFilter() { filterEnabled = !filterEnabled; setTrack('filterTrack', filterEnabled); saveDetection(); }
+function toggleAdaptive() { adaptiveEnabled = !adaptiveEnabled; setTrack('adaptiveTrack', adaptiveEnabled); saveDetection(); }
+bindSlider('filterLow', 'filterLowValue', (v) => v + ' Hz', saveDetection);
+bindSlider('filterHigh', 'filterHighValue', (v) => v + ' Hz', saveDetection);
 
-// ---- Strike Mode ----
-function toggleStrikeMode() { strikeModeEnabled = !strikeModeEnabled; setTrack('strikeModeTrack', strikeModeEnabled); saveStrikeMode(); }
-function saveStrikeMode() {
-    var min = parseInt(document.getElementById('strikeMinInterval').value);
-    var max = parseInt(document.getElementById('strikeMaxInterval').value);
-    if (max <= min) { max = min + 10; document.getElementById('strikeMaxInterval').value = max; document.getElementById('strikeMaxValue').textContent = max + 's'; }
-    socket.emit('save_strike_mode', { enabled: strikeModeEnabled, min_interval: min, max_interval: max });
-    document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
-        ? 'Active: every ' + min + 's – ' + max + 's'
-        : '';
+// ---- Scheduler ----
+function scheduleText(s, e) { return scheduleEnabled ? 'Active: ' + s + ' → ' + e + ' (checks every 30s)' : ''; }
+function toggleSchedule() { scheduleEnabled = !scheduleEnabled; setTrack('scheduleTrack', scheduleEnabled); saveSchedule(); }
+function saveSchedule() {
+    const s = $('scheduleStart').value, e = $('scheduleEnd').value;
+    socket.emit('save_schedule', { enabled: scheduleEnabled, start: s, end: e });
+    $('scheduleStatus').textContent = scheduleText(s, e);
 }
 
-// ---- Rate Limiting ----
+// ---- Night mode ----
+function toggleNightMode() { nightModeEnabled = !nightModeEnabled; setTrack('nightModeTrack', nightModeEnabled); saveNightMode(); }
+function saveNightMode() {
+    socket.emit('save_night_mode', {
+        enabled: nightModeEnabled, start: $('nightStart').value, end: $('nightEnd').value,
+        threshold: parseFloat($('nightThreshold').value), replay_mode: $('nightReplayMode').value
+    });
+    updateNightBadge();
+}
+
+// ---- Strike mode ----
+function strikeText(min, max) { return strikeModeEnabled ? 'Active: every ' + min + 's – ' + max + 's' : ''; }
+function toggleStrikeMode() { strikeModeEnabled = !strikeModeEnabled; setTrack('strikeModeTrack', strikeModeEnabled); saveStrikeMode(); }
+function saveStrikeMode() {
+    const min = parseInt($('strikeMinInterval').value);
+    let max = parseInt($('strikeMaxInterval').value);
+    if (max <= min) { max = min + 10; $('strikeMaxInterval').value = max; $('strikeMaxValue').textContent = max + 's'; }
+    socket.emit('save_strike_mode', { enabled: strikeModeEnabled, min_interval: min, max_interval: max });
+    $('strikeModeStatus').textContent = strikeText(min, max);
+}
+bindSlider('strikeMinInterval', 'strikeMinValue', (v) => v + 's', saveStrikeMode);
+bindSlider('strikeMaxInterval', 'strikeMaxValue', (v) => v + 's', saveStrikeMode);
+
+// ---- Rate limiting ----
 function updateMaxBooms(val) {
     maxBoomsPerHour = parseInt(val);
-    document.getElementById('maxBoomsValue').textContent = maxBoomsPerHour === 0 ? '∞' : val;
-    document.getElementById('limitBarWrap').style.display = maxBoomsPerHour > 0 ? 'block' : 'none';
-    document.getElementById('hourlyLimitText').textContent = maxBoomsPerHour > 0 ? ' / ' + maxBoomsPerHour : '';
+    $('maxBoomsValue').textContent = maxBoomsPerHour === 0 ? '∞' : val;
+    $('limitBarWrap').style.display = maxBoomsPerHour > 0 ? 'block' : 'none';
+    $('hourlyLimitText').textContent = maxBoomsPerHour > 0 ? ' / ' + maxBoomsPerHour : '';
     updateLimitBar();
 }
 function updateLimitBar() {
     if (maxBoomsPerHour === 0) return;
-    var pct = Math.min(100, (hourlyCount / maxBoomsPerHour) * 100);
-    var bar = document.getElementById('limitBar');
+    const pct = Math.min(100, hourlyCount / maxBoomsPerHour * 100);
+    const bar = $('limitBar');
     bar.style.width = pct + '%';
     bar.style.background = pct >= 100 ? '#e23e57' : pct >= 75 ? '#f0a500' : '#4ecca3';
 }
-function saveLimits() { socket.emit('save_limits', { max_booms_per_hour: maxBoomsPerHour }); }
+$('maxBoomsPerHour').addEventListener('input', function () { updateMaxBooms(this.value); });
+$('maxBoomsPerHour').addEventListener('change', () => socket.emit('save_limits', { max_booms_per_hour: maxBoomsPerHour }));
+
+// ---- Notifications ----
+function toggleNotify() { notifyEnabled = !notifyEnabled; setTrack('notifyTrack', notifyEnabled); saveNotify(); }
+function saveNotify() {
+    socket.emit('save_notify', {
+        enabled: notifyEnabled, url: $('notifyUrl').value.trim(),
+        on_boom: $('notifyOnBoom').checked, on_limit: $('notifyOnLimit').checked
+    });
+}
+function testNotify() { saveNotify(); socket.emit('test_notify'); toast('Test notification sent', true); }
 
 // ---- Stats ----
-socket.on('stats', function(data) {
-    document.getElementById('statToday').textContent = data.today;
-    document.getElementById('statWeek').textContent = data.week;
-    document.getElementById('statTotal').textContent = data.total;
+socket.on('stats', (data) => {
+    $('statToday').textContent = data.today;
+    $('statWeek').textContent = data.week;
+    $('statTotal').textContent = data.total;
+    renderHeatmap(data.heatmap);
     if (!chartsReady) return;
     hourlyChart.data.labels = data.hourly.labels;
     hourlyChart.data.datasets[0].data = data.hourly.data;
@@ -788,64 +964,112 @@ socket.on('stats', function(data) {
     dailyChart.data.datasets[0].data = data.daily.data;
     dailyChart.update();
 });
-setInterval(function() { socket.emit('get_stats'); }, 60000);
+setInterval(() => socket.emit('get_stats'), 60000);
 
-// ---- Boom events ----
-socket.on('boom', function(data) {
-    document.getElementById('boomCount').textContent = data.today_count;
+function renderHeatmap(matrix) {
+    const box = $('heatmap');
+    box.innerHTML = '';
+    if (!matrix) return;
+    const max = Math.max(1, ...matrix.map((r) => Math.max(...r)));
+    box.appendChild(el('div', 'lbl'));
+    for (let h = 0; h < 24; h++) box.appendChild(el('div', 'lbl', h % 3 === 0 ? String(h) : ''));
+    matrix.forEach((row, d) => {
+        box.appendChild(el('div', 'lbl row-lbl', DAYS[d]));
+        row.forEach((n, h) => {
+            const c = el('div', 'cell');
+            if (n > 0) c.style.background = 'rgba(226,62,87,' + (0.2 + 0.8 * n / max).toFixed(2) + ')';
+            c.title = DAYS[d] + ' ' + h + ':00 — ' + n + ' boom' + (n === 1 ? '' : 's');
+            box.appendChild(c);
+        });
+    });
+}
+
+$('exportDays').addEventListener('change', function () {
+    $('reportLink').href = '/report?days=' + this.value;
+    $('csvLink').href = '/history.csv?days=' + this.value;
+});
+
+// ---- History ----
+function renderHistory() {
+    const list = $('historyList');
+    const f = $('historyFilter').value;
+    const items = historyItems.filter((i) => f === 'all' || (f === 'muted') === !!i.muted);
+    list.innerHTML = '';
+    if (!items.length) {
+        list.appendChild(el('div', 'history-empty', historyItems.length ? 'Nothing matches this filter' : 'No detections yet'));
+        return;
+    }
+    items.forEach((i) => {
+        const row = el('div', 'history-item' + (i.muted ? ' history-muted' : ''));
+        row.appendChild(el('span', 'history-time', i.time));
+        const snd = el('span', 'history-sound', i.muted ? '' : (i.mode ? soundLabel(i.mode) : ''));
+        if (i.muted) snd.appendChild(el('span', 'tag-muted', 'muted (hourly limit)'));
+        row.appendChild(snd);
+        row.appendChild(el('span', 'history-meta', (i.duration || 0).toFixed(1) + 's'));
+        row.appendChild(el('span', 'history-db', fmtDb(i.rms)));
+        if (i.recording) {
+            const b = el('button', 'btn-tiny', '▶');
+            b.title = 'Play recording';
+            b.onclick = () => playRecording(i.recording);
+            row.appendChild(b);
+        }
+        list.appendChild(row);
+    });
+}
+socket.on('history', (data) => {
+    historyItems = data.items;
+    $('boomCount').textContent = data.today_count;
+    renderHistory();
+});
+
+socket.on('boom', (data) => {
+    $('boomCount').textContent = data.today_count;
+    document.title = 'NoisyNeighbors (' + data.today_count + ')';
     hourlyCount = data.hourly_count || 0;
-    document.getElementById('hourlyCount').textContent = hourlyCount;
+    $('hourlyCount').textContent = hourlyCount;
     updateLimitBar();
-
-    var list = document.getElementById('historyList');
-    var empty = list.querySelector('.history-empty');
-    if (empty) empty.remove();
-    var item = document.createElement('div');
-    item.className = 'history-item' + (data.limit_reached ? ' history-muted' : '');
-    var muted = data.limit_reached ? ' <span style="color:#f0a500;font-size:11px;">[muted]</span>' : '';
-    item.innerHTML = '<span class="history-time">' + data.time + '</span><span>' + data.duration.toFixed(1) + 's</span><span class="history-rms">' + data.rms.toFixed(4) + '</span>' + muted;
-    list.insertBefore(item, list.firstChild);
-    while (list.children.length > 50) list.removeChild(list.lastChild);
+    historyItems.unshift(data);
+    if (historyItems.length > 50) historyItems.pop();
+    renderHistory();
+    boomMarks.push(Date.now());
+    document.body.classList.remove('flash');
+    void document.body.offsetWidth;
+    document.body.classList.add('flash');
+    toast('BOOM ' + fmtDb(data.rms) + (data.muted ? ' (muted)' : ''));
+    if (saveRecordingsEnabled) loadRecordings();
 });
 
 // ---- Config loading ----
-socket.on('config', function(data) {
-    threshold = data.threshold;
-    document.getElementById('threshold').value = data.threshold;
-    document.getElementById('thresholdValue').textContent = parseFloat(data.threshold).toFixed(2);
-    document.getElementById('cooldown_seconds').value = data.cooldown_seconds;
-    document.getElementById('cooldownValue').textContent = data.cooldown_seconds + 's';
-    document.getElementById('pre_boom_seconds').value = data.pre_boom_seconds;
-    document.getElementById('preBoomValue').textContent = parseFloat(data.pre_boom_seconds).toFixed(1) + 's';
-    document.getElementById('post_boom_seconds').value = data.post_boom_seconds;
-    document.getElementById('postBoomValue').textContent = parseFloat(data.post_boom_seconds).toFixed(1) + 's';
+socket.on('config', (data) => {
+    threshold = liveThreshold = data.threshold;
+    $('threshold').value = data.threshold;
+    $('thresholdValue').textContent = parseFloat(data.threshold).toFixed(2);
+    $('cooldown_seconds').value = data.cooldown_seconds;
+    $('cooldownValue').textContent = data.cooldown_seconds + 's';
+    $('pre_boom_seconds').value = data.pre_boom_seconds;
+    $('preBoomValue').textContent = parseFloat(data.pre_boom_seconds).toFixed(1) + 's';
+    $('post_boom_seconds').value = data.post_boom_seconds;
+    $('postBoomValue').textContent = parseFloat(data.post_boom_seconds).toFixed(1) + 's';
     updateThresholdLine();
 });
 
-socket.on('extended_config', function(data) {
+socket.on('extended_config', (data) => {
     scheduleEnabled = data.schedule_enabled;
     setTrack('scheduleTrack', scheduleEnabled);
-    document.getElementById('scheduleStart').value = data.schedule_start;
-    document.getElementById('scheduleEnd').value = data.schedule_end;
-    document.getElementById('scheduleStatus').textContent = scheduleEnabled
-        ? 'Active: ' + data.schedule_start + ' → ' + data.schedule_end + ' (checks every 30s)' : '';
+    $('scheduleStart').value = data.schedule_start;
+    $('scheduleEnd').value = data.schedule_end;
+    $('scheduleStatus').textContent = scheduleText(data.schedule_start, data.schedule_end);
 
     nightModeEnabled = data.night_mode_enabled;
     setTrack('nightModeTrack', nightModeEnabled);
-    document.getElementById('nightStart').value = data.night_mode_start;
-    document.getElementById('nightEnd').value = data.night_mode_end;
-    document.getElementById('nightThreshold').value = data.night_threshold;
-    document.getElementById('nightThresholdValue').textContent = parseFloat(data.night_threshold).toFixed(2);
-    setTimeout(function() {
-        var sel = document.getElementById('nightReplayMode');
-        for (var i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === data.night_replay_mode) { sel.selectedIndex = i; break; }
-        }
-    }, 200);
+    $('nightStart').value = data.night_mode_start;
+    $('nightEnd').value = data.night_mode_end;
+    $('nightThreshold').value = data.night_threshold;
+    $('nightThresholdValue').textContent = parseFloat(data.night_threshold).toFixed(2);
     updateNightBadge();
 
     maxBoomsPerHour = data.max_booms_per_hour;
-    document.getElementById('maxBoomsPerHour').value = maxBoomsPerHour;
+    $('maxBoomsPerHour').value = maxBoomsPerHour;
     updateMaxBooms(maxBoomsPerHour);
 
     saveRecordingsEnabled = data.save_recordings;
@@ -854,139 +1078,94 @@ socket.on('extended_config', function(data) {
 
     strikeModeEnabled = data.strike_mode_enabled;
     setTrack('strikeModeTrack', strikeModeEnabled);
-    document.getElementById('strikeMinInterval').value = data.strike_min_interval;
-    document.getElementById('strikeMinValue').textContent = data.strike_min_interval + 's';
-    document.getElementById('strikeMaxInterval').value = data.strike_max_interval;
-    document.getElementById('strikeMaxValue').textContent = data.strike_max_interval + 's';
-    document.getElementById('strikeModeStatus').textContent = strikeModeEnabled
-        ? 'Active: every ' + data.strike_min_interval + 's – ' + data.strike_max_interval + 's'
-        : '';
-});
+    $('strikeMinInterval').value = data.strike_min_interval;
+    $('strikeMinValue').textContent = data.strike_min_interval + 's';
+    $('strikeMaxInterval').value = data.strike_max_interval;
+    $('strikeMaxValue').textContent = data.strike_max_interval + 's';
+    $('strikeModeStatus').textContent = strikeText(data.strike_min_interval, data.strike_max_interval);
 
-socket.on('history', function(data) {
-    var list = document.getElementById('historyList');
-    if (data.items.length === 0) return;
-    list.innerHTML = '';
-    document.getElementById('boomCount').textContent = data.today_count;
-    data.items.forEach(function(item) {
-        var el = document.createElement('div');
-        el.className = 'history-item';
-        el.innerHTML = '<span class="history-time">' + item.time + '</span><span>' + item.duration.toFixed(1) + 's</span><span class="history-rms">' + item.rms.toFixed(4) + '</span>';
-        list.appendChild(el);
-    });
+    filterEnabled = data.filter_enabled;
+    setTrack('filterTrack', filterEnabled);
+    $('filterLow').value = data.filter_low_hz;
+    $('filterLowValue').textContent = data.filter_low_hz + ' Hz';
+    $('filterHigh').value = data.filter_high_hz;
+    $('filterHighValue').textContent = data.filter_high_hz + ' Hz';
+    adaptiveEnabled = data.adaptive_threshold;
+    setTrack('adaptiveTrack', adaptiveEnabled);
+
+    notifyEnabled = data.notify_enabled;
+    setTrack('notifyTrack', notifyEnabled);
+    $('notifyUrl').value = data.notify_url;
+    $('notifyOnBoom').checked = data.notify_on_boom;
+    $('notifyOnLimit').checked = data.notify_on_limit;
+
+    $('passwordNote').textContent = data.password_protected
+        ? 'Dashboard is password-protected.'
+        : 'Dashboard is open to anyone on your network. Set "dashboard_password" in config.json and restart to protect it.';
 });
 
 // ---- Bluetooth Speaker ----
+function deviceRow(label, connected) {
+    const row = el('div', 'device-row');
+    row.appendChild(el('span', connected ? 'connected' : '', label));
+    return row;
+}
 function renderBtPairedList() {
-    var el = document.getElementById('btPairedList');
-    if (btPairedDevices.length === 0) {
-        el.innerHTML = '<div style="color: #666;">No paired speakers yet</div>';
-        return;
-    }
-    el.innerHTML = '';
-    btPairedDevices.forEach(function(d) {
-        var connected = d.mac === btConnectedMac;
-        var row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;';
-        var label = document.createElement('span');
-        label.textContent = d.name + (connected ? ' (connected)' : '');
-        if (connected) label.style.color = '#4caf50';
-        row.appendChild(label);
-        var btns = document.createElement('span');
+    const box = $('btPairedList');
+    box.innerHTML = '';
+    if (!btPairedDevices.length) { box.appendChild(el('div', 'small', 'No paired speakers yet')); return; }
+    btPairedDevices.forEach((d) => {
+        const connected = d.mac === btConnectedMac;
+        const row = deviceRow(d.name + (connected ? ' (connected)' : ''), connected);
+        const btns = el('span');
         if (!connected) {
-            var connectBtn = document.createElement('button');
-            connectBtn.className = 'btn btn-secondary';
-            connectBtn.textContent = 'Connect';
-            connectBtn.onclick = function() { socket.emit('bt_connect', { mac: d.mac }); };
-            btns.appendChild(connectBtn);
+            const c = el('button', 'btn btn-secondary', 'Connect');
+            c.onclick = () => socket.emit('bt_connect', { mac: d.mac });
+            btns.appendChild(c);
         }
-        var forgetBtn = document.createElement('button');
-        forgetBtn.className = 'btn btn-secondary';
-        forgetBtn.style.marginLeft = '6px';
-        forgetBtn.textContent = 'Forget';
-        forgetBtn.onclick = function() {
-            if (confirm('Forget ' + d.name + '?')) socket.emit('bt_forget', { mac: d.mac });
-        };
-        btns.appendChild(forgetBtn);
+        const fg = el('button', 'btn btn-secondary', 'Forget');
+        fg.style.marginLeft = '6px';
+        fg.onclick = () => { if (confirm('Forget ' + d.name + '?')) socket.emit('bt_forget', { mac: d.mac }); };
+        btns.appendChild(fg);
         row.appendChild(btns);
-        el.appendChild(row);
+        box.appendChild(row);
     });
 }
-
 function btScan() {
-    document.getElementById('btScanBtn').disabled = true;
-    document.getElementById('btScanStatus').textContent = 'Scanning for 8s — put your speaker in pairing mode...';
-    document.getElementById('btScanList').innerHTML = '';
+    $('btScanBtn').disabled = true;
+    $('btScanStatus').textContent = 'Scanning for 8s — put your speaker in pairing mode...';
+    $('btScanList').innerHTML = '';
     socket.emit('bt_scan');
 }
-
-socket.on('bt_scan_result', function(data) {
-    document.getElementById('btScanBtn').disabled = false;
-    document.getElementById('btScanStatus').textContent = data.devices.length
-        ? ''
-        : 'No new speakers found. Make sure pairing mode is active and try again.';
-    var el = document.getElementById('btScanList');
-    el.innerHTML = '';
-    data.devices.forEach(function(d) {
-        var row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;';
-        var label = document.createElement('span');
-        label.textContent = d.name;
-        row.appendChild(label);
-        var pairBtn = document.createElement('button');
-        pairBtn.className = 'btn btn-secondary';
-        pairBtn.textContent = 'Pair';
-        pairBtn.onclick = function() {
-            pairBtn.disabled = true;
-            pairBtn.textContent = 'Pairing...';
-            socket.emit('bt_pair', { mac: d.mac });
-        };
-        row.appendChild(pairBtn);
-        el.appendChild(row);
+socket.on('bt_scan_result', (data) => {
+    $('btScanBtn').disabled = false;
+    $('btScanStatus').textContent = data.devices.length ? '' : 'No new speakers found. Make sure pairing mode is active and try again.';
+    const box = $('btScanList');
+    box.innerHTML = '';
+    data.devices.forEach((d) => {
+        const row = deviceRow(d.name, false);
+        const b = el('button', 'btn btn-secondary', 'Pair');
+        b.onclick = () => { b.disabled = true; b.textContent = 'Pairing...'; socket.emit('bt_pair', { mac: d.mac }); };
+        row.appendChild(b);
+        box.appendChild(row);
     });
 });
-
-socket.on('bt_pair_result', function(data) {
-    document.getElementById('btScanStatus').textContent = (data.ok ? 'Paired: ' : 'Failed: ') + data.message;
-});
-
-socket.on('bt_connect_result', function(data) {
-    document.getElementById('btScanStatus').textContent = (data.ok ? 'Connected' : 'Failed: ') + data.message;
-});
-
-socket.on('bt_forget_result', function(data) {
-    document.getElementById('btScanStatus').textContent = data.ok ? 'Removed' : ('Failed: ' + data.message);
-});
-
-socket.on('bt_status_result', function(data) {
+socket.on('bt_pair_result', (d) => { $('btScanStatus').textContent = (d.ok ? 'Paired: ' : 'Failed: ') + d.message; });
+socket.on('bt_connect_result', (d) => { $('btScanStatus').textContent = (d.ok ? 'Connected: ' : 'Failed: ') + d.message; });
+socket.on('bt_forget_result', (d) => { $('btScanStatus').textContent = d.ok ? 'Removed' : 'Failed: ' + d.message; });
+socket.on('bt_status_result', (data) => {
     btConnectedMac = data.mac;
-    var dot = document.getElementById('btDot');
-    var text = document.getElementById('btStatusText');
-    if (data.connected) {
-        dot.style.background = '#4caf50';
-        text.textContent = 'Connected: ' + (data.name || data.mac);
-    } else {
-        dot.style.background = '#666';
-        text.textContent = 'Not connected';
-    }
+    $('btDot').classList.toggle('ok', !!data.connected);
+    $('btStatusText').textContent = data.connected ? 'Connected: ' + (data.name || data.mac) : 'Not connected';
     renderBtPairedList();
 });
-
-socket.on('bt_paired_devices', function(data) {
-    btPairedDevices = data.devices;
-    renderBtPairedList();
-});
-
+socket.on('bt_paired_devices', (data) => { btPairedDevices = data.devices; renderBtPairedList(); });
 function btRestartAdapter() {
-    document.getElementById('btRestartBtn').disabled = true;
-    document.getElementById('btScanStatus').textContent = 'Restarting Bluetooth...';
+    $('btRestartBtn').disabled = true;
+    $('btScanStatus').textContent = 'Restarting Bluetooth...';
     socket.emit('bt_restart_adapter');
 }
-
-socket.on('bt_restart_result', function(data) {
-    document.getElementById('btRestartBtn').disabled = false;
-    document.getElementById('btScanStatus').textContent = data.message;
-});
+socket.on('bt_restart_result', (data) => { $('btRestartBtn').disabled = false; $('btScanStatus').textContent = data.message; });
 
 // ---- Recordings ----
 function toggleSaveRecordings() {
@@ -995,55 +1174,57 @@ function toggleSaveRecordings() {
     socket.emit('set_save_recordings', { enabled: saveRecordingsEnabled });
     if (saveRecordingsEnabled) loadRecordings();
 }
-
-function loadRecordings() {
-    fetch('/recordings-list').then(function(r) { return r.json(); }).then(function(files) {
-        var list = document.getElementById('recordingsList');
-        if (files.length === 0) { list.innerHTML = '<div class="history-empty">No recordings yet</div>'; return; }
-        list.innerHTML = '';
-        files.forEach(function(f) {
-            var el = document.createElement('div');
-            el.className = 'recording-item'; el.id = 'rec_' + f.name;
-            var dt = formatRecordingName(f.name);
-            var size = (f.size / 1024).toFixed(0) + ' KB';
-            el.innerHTML = '<span class="recording-name">' + dt + '</span><span class="recording-size">' + size + '</span>' +
-                '<div class="recording-actions">' +
-                '<button class="btn-tiny btn-play" onclick="playRecording(\'' + f.name + '\')">&#9654;</button>' +
-                '<a href="/recordings/' + f.name + '" download class="btn-tiny btn-play" style="text-decoration:none;">&#8659;</a>' +
-                '<button class="btn-tiny btn-del" onclick="deleteRecording(\'' + f.name + '\')">&#215;</button>' +
-                '</div>';
-            list.appendChild(el);
-        });
-        document.getElementById('recordingsHint').textContent = files.length + ' recording' + (files.length > 1 ? 's' : '');
-    }).catch(function() {});
-}
-
 function formatRecordingName(name) {
-    var m = name.match(/boom_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
-    if (!m) return name;
-    return m[3] + '/' + m[2] + '/' + m[1] + '  ' + m[4] + ':' + m[5] + ':' + m[6];
+    const m = name.match(/boom_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] + '  ' + m[4] + ':' + m[5] + ':' + m[6] : name;
 }
-
-var currentAudio = null;
+function loadRecordings() {
+    fetch('/recordings-list').then((r) => r.json()).then((files) => {
+        const list = $('recordingsList');
+        list.innerHTML = '';
+        if (!files.length) { list.appendChild(el('div', 'history-empty', 'No recordings yet')); return; }
+        files.forEach((f) => {
+            const row = el('div', 'recording-item');
+            row.id = 'rec_' + f.name;
+            row.appendChild(el('span', 'recording-name', formatRecordingName(f.name)));
+            row.appendChild(el('span', 'recording-size', (f.size / 1024).toFixed(0) + ' KB'));
+            const acts = el('div', 'recording-actions');
+            const play = el('button', 'btn-tiny', '▶'); play.title = 'Play'; play.onclick = () => playRecording(f.name);
+            const dl = el('a', 'btn-tiny', '⇩'); dl.href = '/recordings/' + encodeURIComponent(f.name); dl.setAttribute('download', ''); dl.title = 'Download';
+            const del = el('button', 'btn-tiny btn-del', '×'); del.title = 'Delete'; del.onclick = () => socket.emit('delete_recording', { name: f.name });
+            acts.append(play, dl, del);
+            row.appendChild(acts);
+            list.appendChild(row);
+        });
+        $('recordingsHint').textContent = files.length + ' recording' + (files.length > 1 ? 's' : '');
+    }).catch(() => {});
+}
+let currentAudio = null;
 function playRecording(name) {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    currentAudio = new Audio('/recordings/' + name);
-    currentAudio.play();
+    if (currentAudio) currentAudio.pause();
+    currentAudio = new Audio('/recordings/' + encodeURIComponent(name));
+    currentAudio.play().catch(() => toast('Recording not available', true));
 }
-
-function deleteRecording(name) { socket.emit('delete_recording', { name: name }); }
-
-socket.on('recording_deleted', function(data) {
-    var el = document.getElementById('rec_' + data.name);
-    if (el) el.remove();
-    var list = document.getElementById('recordingsList');
-    if (!list.querySelector('.recording-item')) {
-        list.innerHTML = '<div class="history-empty">No recordings yet</div>';
-        document.getElementById('recordingsHint').textContent = '';
+socket.on('recording_deleted', (data) => {
+    const row = $('rec_' + data.name);
+    if (row) row.remove();
+    historyItems.forEach((i) => { if (i.recording === data.name) i.recording = null; });
+    renderHistory();
+    if (!$('recordingsList').querySelector('.recording-item')) {
+        $('recordingsList').innerHTML = '';
+        $('recordingsList').appendChild(el('div', 'history-empty', 'No recordings yet'));
+        $('recordingsHint').textContent = '';
     }
 });
 
 updateThresholdLine();
+renderStatus();
+// Restore the last tab (last, so every declaration above is initialised)
+(function () {
+    const t = location.hash.slice(1) || tryLoad('activeTab');
+    switchTab(['live', 'config', 'devices', 'stats'].indexOf(t) >= 0 ? t : 'live');
+})();
 </script>
+{% endraw %}
 </body>
 </html>

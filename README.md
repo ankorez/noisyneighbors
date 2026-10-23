@@ -55,10 +55,14 @@ python3 noisyneighbors.py
 
 The web dashboard is available at `http://<hostname>.local:5000`. It's organized into tabs:
 
-- **Live** — real-time audio level, boom/status indicator, enable/disable toggle, and test buttons for sound and vibration.
-- **Config** — replay mode, threshold, volume, scheduler, night mode, strike mode, and rate limiting.
-- **Devices** — audio input/output device selection (including a paired Bluetooth speaker), PS4 controller vibration settings, and Bluetooth speaker pairing (scan/pair/connect/forget).
-- **Stats** — detection history and aggregate stats, plus saved recordings (if enabled).
+A status bar stays visible on every tab: current state, today's count, **Pause** (30 min / 1 h / 2 h / until 08:00 tomorrow, then detection resumes by itself) and enable/disable. It also shows when the connection to the device is lost. You can deep-link to a tab, e.g. `http://<hostname>.local:5000/#stats`.
+
+- **Live** — level meter in dB with a 60-second trace and the threshold line, auto-calibration, and the detection history (sound played, level, ▶ to replay the recording; filter answered/muted). A flash and a toast appear on each detection.
+- **Config** — response sound (including custom uploads, per-sound level, *Random* and *Escalate* modes), detection (frequency filter, adaptive threshold), night mode, scheduler, strike mode, rate limiting, notifications, and timing settings.
+- **Devices** — audio input/output device selection (including a paired Bluetooth speaker), volume, PS4 controller vibration settings, and Bluetooth speaker pairing (scan/pair/connect/forget).
+- **Stats** — aggregate stats and charts, a weekday × hour heatmap, CSV export and a printable report, plus saved recordings (if enabled).
+
+The dashboard needs no internet access: its JavaScript libraries are bundled in `static/vendor/`.
 
 ### systemd service (auto-start)
 
@@ -117,7 +121,7 @@ The service starts automatically on boot.
 | `device` | sounddevice device index for capture. `null` = auto-detect first USB device. |
 | `alsa_device` | ALSA device for playback, or `"bluetooth"` to use a paired Bluetooth speaker. `null` = auto-detect USB device. |
 | `output_sample_rate` | Output sample rate for playback (48000 recommended). |
-| `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`, `sandstorm`, `hammering`. |
+| `replay_mode` | Sound played after detection: `echo` (replay the boom), `alarm`, `doorbell`, `hammer`, `honk`, `siren`, `sandstorm`, `hammering`, any custom sound name, `random` (a different sound each time) or `escalate` (gentle to loud on consecutive booms, resets after 10 quiet minutes). |
 | `ps4_vibration` | Enable PS4 controller vibration on boom detection (triggers alongside the sound). |
 | `vibration_intensity` | Vibration intensity (10-100%). |
 | `schedule_enabled` | Only run detection during the `schedule_start`–`schedule_end` window (auto enable/disable). |
@@ -131,6 +135,14 @@ The service starts automatically on boot.
 | `strike_mode_enabled` | Randomly fire sound/vibration on an interval, independent of boom detection. |
 | `strike_min_interval` / `strike_max_interval` | Random delay range (seconds) between Strike Mode firings. |
 | `web_port` | Web dashboard port (default 5000). |
+| `filter_enabled` | Measure only the `filter_low_hz`–`filter_high_hz` band instead of the whole spectrum. Thumps and bass pass; speech and TV are largely ignored. Levels and thresholds then refer to that band. |
+| `filter_low_hz` / `filter_high_hz` | Band limits in Hz (default 20–250). |
+| `adaptive_threshold` | Automatically raise the threshold above steady background noise (fan, rain, traffic). Never goes below `threshold`. |
+| `sound_gains` | Per-sound level (0.1–1.0), set from the dashboard, e.g. `{"siren": 0.6}`. |
+| `notify_enabled` / `notify_url` | Send a push message (HTTP POST, [ntfy.sh](https://ntfy.sh)-style) to `notify_url` on events. |
+| `notify_on_boom` / `notify_on_limit` | Notify on each boom / when the hourly limit is reached. |
+| `notify_min_interval` | Minimum seconds between boom notifications (default 60). |
+| `dashboard_password` | If non-empty, the dashboard asks for this password (HTTP Basic, any username). Empty = open to the whole network. Restart the service after editing. |
 
 ### Finding audio devices
 
@@ -139,6 +151,22 @@ python3 noisyneighbors.py --list-devices
 ```
 
 This lists all available devices with their index, channel count, and sample rate.
+
+### Custom sounds
+
+Upload WAV files (16-bit PCM, mono or stereo, up to 30 s) from **Config → Response Sound**. They are stored in `custom_sounds/` (not tracked by git) and appear in the sound dropdowns.
+
+### Reducing false triggers
+
+Turn on the **frequency filter** (Config → Detection) so only low-frequency thumps count, and/or **adaptive threshold** so steady background noise doesn't trigger detections. The level meter then shows the filtered level.
+
+### Notifications
+
+Create a private topic URL such as `https://ntfy.sh/my-secret-topic`, subscribe to it in the ntfy phone app, and paste it in **Config → Notifications**. Anyone who knows the URL can read the alerts, so choose an unguessable topic.
+
+### Evidence report
+
+**Stats → Export & Report** downloads the detection log as CSV or opens a printable report (use *Print → Save as PDF*) with totals, events per day, busiest hour and the full event log. Levels are relative dB values from the microphone, not calibrated sound-pressure measurements.
 
 ### Calibrating the threshold
 

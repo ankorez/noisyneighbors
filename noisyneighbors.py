@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """NoisyNeighbors - Detects neighbor booms and plays them back."""
 
+import io
+import csv
+import hmac
 import json
+import math
 import os
 import re
 import sys
@@ -13,11 +17,12 @@ import logging
 import tempfile
 import threading
 import subprocess
+import urllib.request
 from datetime import datetime, date, timedelta
 
 import numpy as np
 import sounddevice as sd
-from flask import Flask, render_template, send_from_directory, jsonify
+from flask import Flask, Response, render_template, request, send_from_directory, jsonify
 from flask_socketio import SocketIO
 
 logging.basicConfig(
@@ -29,6 +34,7 @@ log = logging.getLogger("noisyneighbors")
 # Flask app
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "noisyneighbors"
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024  # custom sound uploads
 socketio = SocketIO(app, async_mode="threading")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +54,12 @@ state = {
     "calibration_samples": [],
     "hourly_boom_count": 0,
     "current_hour": -1,
+    "pause_until": None,
+    "escalation_level": 0,
+    "escalation_ts": 0.0,
+    "last_notify": 0.0,
+    "limit_notified_hour": None,
+    "effective_threshold": None,
 }
 
 CONFIG_PATH = "config.json"
@@ -101,6 +113,105 @@ def is_in_time_range(start_str, end_str):
         return False
 
 
+def set_enabled(enabled):
+    """Enable/disable detection and tell every dashboard."""
+    state["enabled"] = enabled
+    cb = state.get("cb_state")
+    if cb is not None:
+        cb["paused"] = not enabled
+    socketio.emit("enabled_state", {"enabled": enabled})
+    socketio.emit("status", {"state": "listening" if enabled else "disabled"})
+
+
+def emit_pause_state():
+    until = state["pause_until"]
+    socketio.emit("pause_state", {"until": int(until * 1000) if until else None})
+
+
+def pause_loop():
+    """Background thread: re-enable detection when a timed pause expires."""
+    while True:
+        time.sleep(5)
+        until = state["pause_until"]
+        if until and time.time() >= until:
+            state["pause_until"] = None
+            set_enabled(True)
+            emit_pause_state()
+            log.info("Pause ended: NoisyNeighbors enabled")
+
+
+# --- Optional dashboard password (HTTP Basic, password in config.json) ---
+
+def auth_ok(auth):
+    pw = state["config"].get("dashboard_password") or ""
+    if not pw:
+        return True
+    given = (auth.password or "") if auth is not None else ""
+    return hmac.compare_digest(given.encode(), str(pw).encode())
+
+
+@app.before_request
+def require_auth():
+    if auth_ok(request.authorization):
+        return None
+    return Response("Authentication required", 401,
+                    {"WWW-Authenticate": 'Basic realm="NoisyNeighbors"'})
+
+
+# --- Notifications (ntfy.sh style: POST body to a URL) ---
+
+def notify(title, message, force=False, throttle=True):
+    cfg = state["config"]
+    url = (cfg.get("notify_url") or "").strip()
+    if not force and not cfg.get("notify_enabled", False):
+        return
+    if not url.startswith(("http://", "https://")):
+        return
+    if throttle and not force:
+        min_gap = float(cfg.get("notify_min_interval", 60))
+        if time.time() - state["last_notify"] < min_gap:
+            return
+        state["last_notify"] = time.time()
+
+    def _send():
+        try:
+            req = urllib.request.Request(url, data=message.encode("utf-8"), method="POST",
+                                         headers={"Title": title})
+            urllib.request.urlopen(req, timeout=10).close()
+            log.info("Notification sent: %s", title)
+        except Exception as e:
+            log.warning("Notification failed: %s", e)
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def to_db(level):
+    return 20 * math.log10(max(float(level), 1e-6))
+
+
+# --- Band-limited level (isolates thumps/bass from speech and TV) ---
+
+_band_cache = {}
+
+
+def band_level(block, sr, low, high):
+    """RMS of `block` restricted to [low, high] Hz, via a windowed FFT."""
+    x = np.asarray(block, dtype=np.float32).reshape(-1)
+    n = len(x)
+    key = (n, sr, low, high)
+    c = _band_cache.get(key)
+    if c is None:
+        if len(_band_cache) > 8:
+            _band_cache.clear()
+        w = np.hanning(n).astype(np.float32)
+        freqs = np.fft.rfftfreq(n, 1.0 / sr)
+        c = (w, (freqs >= low) & (freqs <= high), float(np.mean(w ** 2)))
+        _band_cache[key] = c
+    w, mask, wpow = c
+    spec = np.fft.rfft(x * w)
+    power = 2.0 * float(np.sum(np.abs(spec[mask]) ** 2)) / (n * n) / wpow
+    return math.sqrt(power)
+
+
 def strike_loop():
     """Background thread: randomly fire sound/vibration when Strike Mode is active."""
     next_strike = 0.0
@@ -122,7 +233,7 @@ def strike_loop():
             continue
         # Fire!
         alsa = cfg.get("alsa_device") or detect_alsa_device()
-        mode = cfg.get("replay_mode", "echo")
+        mode = resolve_replay_mode(cfg.get("replay_mode", "echo"), advance=True)
         log.info("Strike Mode: firing (mode=%s)", mode)
         socketio.emit("status", {"state": "boom"})
         if cfg.get("ps4_vibration", False):
@@ -150,19 +261,13 @@ def scheduler_loop():
     while True:
         time.sleep(30)
         cfg = state["config"]
-        if not cfg.get("schedule_enabled", False):
+        if not cfg.get("schedule_enabled", False) or state["pause_until"]:
             continue
         start = cfg.get("schedule_start", "22:00")
         end = cfg.get("schedule_end", "08:00")
         should_be_enabled = is_in_time_range(start, end)
         if should_be_enabled != state["enabled"]:
-            state["enabled"] = should_be_enabled
-            cb = state.get("cb_state")
-            if cb is not None:
-                cb["paused"] = not should_be_enabled
-            status = "listening" if should_be_enabled else "disabled"
-            socketio.emit("enabled_state", {"enabled": should_be_enabled})
-            socketio.emit("status", {"state": status})
+            set_enabled(should_be_enabled)
             log.info("Scheduler: NoisyNeighbors %s", "enabled" if should_be_enabled else "disabled")
 
 
@@ -463,7 +568,9 @@ def play_via_bluetooth(path):
             log.error("paplay not found — install pulseaudio-utils")
 
 
-def play_audio(audio, sr, alsa_device, out_sr):
+def play_audio(audio, sr, alsa_device, out_sr, gain=None):
+    if gain is None:
+        gain = sound_gain("echo")
     if sr != out_sr:
         n_samples = int(len(audio) * out_sr / sr)
         indices = np.linspace(0, len(audio) - 1, n_samples)
@@ -472,6 +579,7 @@ def play_audio(audio, sr, alsa_device, out_sr):
     peak = np.max(np.abs(audio))
     if peak > 0:
         audio = audio / peak
+    audio = audio * gain
 
     audio_int16 = (audio * 32767).astype(np.int16)
     stereo = np.column_stack([audio_int16, audio_int16])
@@ -503,33 +611,121 @@ def play_audio(audio, sr, alsa_device, out_sr):
 
 
 SOUNDS_DIR = os.path.join(BASE_DIR, "sounds")
-AVAILABLE_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren", "sandstorm", "hammering"]
+CUSTOM_SOUNDS_DIR = os.path.join(BASE_DIR, "custom_sounds")
+BUILTIN_SOUNDS = ["echo", "alarm", "doorbell", "hammer", "honk", "siren", "sandstorm", "hammering"]
+META_MODES = ["random", "escalate"]
+# "escalate" walks up this list on consecutive booms, restarting after a quiet spell
+ESCALATION_ORDER = ["echo", "doorbell", "honk", "alarm", "siren", "hammer", "hammering", "sandstorm"]
+ESCALATION_RESET_SECONDS = 600
+MAX_CUSTOM_SOUND_SECONDS = 30
 
 # Prevent simultaneous aplay calls (USB device can't handle two streams at once)
 aplay_lock = threading.Lock()
 
 
+def list_custom_sounds():
+    if not os.path.isdir(CUSTOM_SOUNDS_DIR):
+        return []
+    return sorted(f[:-4] for f in os.listdir(CUSTOM_SOUNDS_DIR) if f.endswith(".wav"))
+
+
+def get_available_modes():
+    return BUILTIN_SOUNDS + list_custom_sounds() + META_MODES
+
+
+def sound_path(name):
+    for d in (SOUNDS_DIR, CUSTOM_SOUNDS_DIR):
+        path = os.path.join(d, f"{name}.wav")
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def sound_gain(name):
+    try:
+        return float(np.clip(float(state["config"].get("sound_gains", {}).get(name, 1.0)), 0.1, 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def resolve_replay_mode(mode, advance=False):
+    """Turn "random"/"escalate" into a concrete sound name; other modes pass through."""
+    if mode == "random":
+        return random.choice(BUILTIN_SOUNDS + list_custom_sounds())
+    if mode == "escalate":
+        customs = list_custom_sounds()
+        order = ESCALATION_ORDER + [c for c in customs if c not in ESCALATION_ORDER]
+        now = time.time()
+        if now - state["escalation_ts"] > ESCALATION_RESET_SECONDS:
+            state["escalation_level"] = 0
+        level = min(state["escalation_level"], len(order) - 1)
+        if advance:
+            state["escalation_level"] = level + 1
+            state["escalation_ts"] = now
+        return order[level]
+    return mode
+
+
+def effective_replay_mode():
+    """Configured replay mode, honouring the night-mode override."""
+    cfg = state["config"]
+    mode = cfg.get("replay_mode", "echo")
+    if cfg.get("night_mode_enabled", False) and is_in_time_range(
+            cfg.get("night_mode_start", "22:00"), cfg.get("night_mode_end", "08:00")):
+        mode = cfg.get("night_replay_mode", mode)
+    return mode
+
+
+def _scaled_copy(path, gain):
+    """Temp copy of a 16-bit PCM wav scaled by `gain`, or None if it can't be scaled."""
+    try:
+        with wave.open(path) as w:
+            if w.getsampwidth() != 2:
+                return None
+            nch, fr, frames = w.getnchannels(), w.getframerate(), w.readframes(w.getnframes())
+        arr = np.frombuffer(frames, dtype=np.int16).astype(np.float32) * gain
+        out = np.clip(arr, -32768, 32767).astype(np.int16)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp = f.name
+        with wave.open(tmp, "w") as w:
+            w.setnchannels(nch)
+            w.setsampwidth(2)
+            w.setframerate(fr)
+            w.writeframes(out.tobytes())
+        return tmp
+    except (wave.Error, OSError, EOFError) as e:
+        log.warning("Could not scale %s: %s", path, e)
+        return None
+
+
 def play_sound_file(name, alsa_device):
-    path = os.path.join(SOUNDS_DIR, f"{name}.wav")
-    if not os.path.exists(path):
-        log.error("Sound not found: %s", path)
+    path = sound_path(name)
+    if path is None:
+        log.error("Sound not found: %s", name)
         return
 
-    if alsa_device == BLUETOOTH_OUTPUT_ID:
-        play_via_bluetooth(path)
-        return
+    gain = sound_gain(name)
+    scaled = _scaled_copy(path, gain) if gain < 0.999 else None
+    try:
+        play_path = scaled or path
+        if alsa_device == BLUETOOTH_OUTPUT_ID:
+            play_via_bluetooth(play_path)
+            return
 
-    with aplay_lock:
-        log.debug("aplay sound start: %s on %s", name, alsa_device)
-        try:
-            r = subprocess.run(["aplay", "-D", alsa_device, path],
-                               capture_output=True, text=True, timeout=15)
-            if r.returncode != 0:
-                log.error("aplay sound failed (rc=%d): %s", r.returncode, r.stderr.strip())
-            else:
-                log.debug("aplay sound done: %s", name)
-        except subprocess.TimeoutExpired:
-            log.error("aplay timed out after 15s playing %s on %s", name, alsa_device)
+        with aplay_lock:
+            log.debug("aplay sound start: %s on %s", name, alsa_device)
+            try:
+                r = subprocess.run(["aplay", "-D", alsa_device, play_path],
+                                   capture_output=True, text=True, timeout=15)
+                if r.returncode != 0:
+                    log.error("aplay sound failed (rc=%d): %s", r.returncode, r.stderr.strip())
+                else:
+                    log.debug("aplay sound done: %s", name)
+            except subprocess.TimeoutExpired:
+                log.error("aplay timed out after 15s playing %s on %s", name, alsa_device)
+    finally:
+        if scaled:
+            os.unlink(scaled)
 
 
 def save_recording(audio, sr):
@@ -708,7 +904,18 @@ def compute_stats():
 
     week_total = sum(daily_counts)
 
+    # Weekday x hour heatmap over the last 28 days (rows Mon..Sun)
+    heatmap = [[0] * 24 for _ in range(7)]
+    for item in history:
+        try:
+            dt = datetime.strptime(f"{item['date']} {item['time']}", "%Y-%m-%d %H:%M:%S")
+        except (ValueError, KeyError):
+            continue
+        if 0 <= (now - dt).days < 28:
+            heatmap[dt.weekday()][dt.hour] += 1
+
     return {
+        "heatmap": heatmap,
         "hourly": {"labels": hourly_labels, "data": hourly_counts},
         "daily": {"labels": daily_labels, "data": daily_counts},
         "total": len(history),
@@ -740,10 +947,109 @@ def serve_recording(filename):
     return send_from_directory(RECORDINGS_DIR, filename)
 
 
+def history_since(days):
+    """History entries from the last `days` days (all of them if days <= 0)."""
+    if days <= 0:
+        return list(state["history"])
+    cutoff = str(date.today() - timedelta(days=days - 1))
+    return [h for h in state["history"] if h.get("date", "") >= cutoff]
+
+
+def _days_arg(default):
+    try:
+        return max(0, int(request.args.get("days", default)))
+    except ValueError:
+        return default
+
+
+@app.route("/history.csv")
+def history_csv():
+    items = history_since(_days_arg(0))
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["date", "time", "level_rms", "level_db", "duration_s", "sound", "muted", "recording"])
+    for h in items:
+        rms_v = h.get("rms", 0)
+        w.writerow([h.get("date", ""), h.get("time", ""), f"{rms_v:.4f}", f"{to_db(rms_v):.1f}",
+                    f"{h.get('duration', 0):.2f}", h.get("mode", ""),
+                    "yes" if h.get("muted") else "no", h.get("recording", "")])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=noisyneighbors-history.csv"})
+
+
+@app.route("/report")
+def report():
+    """Printable evidence report (use the browser's Print > Save as PDF)."""
+    days = _days_arg(30)
+    items = history_since(days)
+    per_day = {}
+    per_hour = [0] * 24
+    loudest = None
+    for h in items:
+        per_day[h.get("date", "?")] = per_day.get(h.get("date", "?"), 0) + 1
+        try:
+            per_hour[int(h["time"][:2])] += 1
+        except (KeyError, ValueError, IndexError):
+            pass
+        if loudest is None or h.get("rms", 0) > loudest.get("rms", 0):
+            loudest = h
+    peak_hour = max(range(24), key=lambda i: per_hour[i]) if items else None
+    events = [dict(h, db=to_db(h.get("rms", 0))) for h in reversed(items[-500:])]
+    return render_template(
+        "report.html",
+        days=days, total=len(items), generated=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        per_day=sorted(per_day.items(), reverse=True),
+        peak_hour=peak_hour, peak_hour_count=per_hour[peak_hour] if peak_hour is not None else 0,
+        loudest_db=to_db(loudest["rms"]) if loudest else None,
+        loudest_when=f"{loudest.get('date', '')} {loudest.get('time', '')}" if loudest else "",
+        events=events, truncated=len(items) > 500,
+    )
+
+
+@app.route("/sounds/upload", methods=["POST"])
+def upload_sound():
+    f = request.files.get("file")
+    if f is None or not f.filename:
+        return jsonify({"ok": False, "error": "No file received"}), 400
+    data = f.read()
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            ok_fmt = w.getsampwidth() == 2 and w.getnchannels() in (1, 2)
+            seconds = w.getnframes() / float(w.getframerate() or 1)
+    except (wave.Error, EOFError):
+        return jsonify({"ok": False, "error": "Not a valid WAV file"}), 400
+    if not ok_fmt:
+        return jsonify({"ok": False, "error": "WAV must be 16-bit PCM, mono or stereo"}), 400
+    if seconds > MAX_CUSTOM_SOUND_SECONDS:
+        return jsonify({"ok": False, "error": f"Sound is longer than {MAX_CUSTOM_SOUND_SECONDS}s"}), 400
+    name = re.sub(r"[^a-z0-9_-]", "_", os.path.splitext(f.filename)[0].lower())[:32] or "sound"
+    if name in BUILTIN_SOUNDS or name in META_MODES:
+        name += "_custom"
+    os.makedirs(CUSTOM_SOUNDS_DIR, exist_ok=True)
+    with open(os.path.join(CUSTOM_SOUNDS_DIR, f"{name}.wav"), "wb") as out:
+        out.write(data)
+    log.info("Custom sound uploaded: %s (%.1fs)", name, seconds)
+    emit_replay_mode()
+    return jsonify({"ok": True, "name": name})
+
+
 # --- SocketIO handlers ---
+
+def emit_replay_mode():
+    cfg = state["config"]
+    socketio.emit("replay_mode", {
+        "mode": cfg.get("replay_mode", "echo"),
+        "night_mode": cfg.get("night_replay_mode", "echo"),
+        "available": get_available_modes(),
+        "custom": list_custom_sounds(),
+        "gains": cfg.get("sound_gains", {}),
+    })
+
 
 @socketio.on("connect")
 def on_connect():
+    if not auth_ok(request.authorization):
+        return False
     cfg = state["config"]
     socketio.emit("config", {
         "threshold": cfg.get("threshold", 0.15),
@@ -752,10 +1058,8 @@ def on_connect():
         "post_boom_seconds": cfg.get("post_boom_seconds", 1.5),
     })
     socketio.emit("enabled_state", {"enabled": state["enabled"]})
-    socketio.emit("replay_mode", {
-        "mode": cfg.get("replay_mode", "echo"),
-        "available": AVAILABLE_SOUNDS,
-    })
+    emit_replay_mode()
+    emit_pause_state()
     # PS4 controller status
     ps4 = find_ps4_controller()
     ps4_connected = ps4 is not None
@@ -791,6 +1095,15 @@ def on_connect():
         "strike_mode_enabled": cfg.get("strike_mode_enabled", False),
         "strike_min_interval": cfg.get("strike_min_interval", 60),
         "strike_max_interval": cfg.get("strike_max_interval", 300),
+        "filter_enabled": cfg.get("filter_enabled", False),
+        "filter_low_hz": cfg.get("filter_low_hz", 20),
+        "filter_high_hz": cfg.get("filter_high_hz", 250),
+        "adaptive_threshold": cfg.get("adaptive_threshold", False),
+        "notify_enabled": cfg.get("notify_enabled", False),
+        "notify_url": cfg.get("notify_url", ""),
+        "notify_on_boom": cfg.get("notify_on_boom", True),
+        "notify_on_limit": cfg.get("notify_on_limit", True),
+        "password_protected": bool(cfg.get("dashboard_password")),
     })
     socketio.emit("bt_status_result", get_bt_status())
     socketio.emit("bt_paired_devices", {"devices": list_paired_bt_devices()})
@@ -851,13 +1164,10 @@ def on_set_volume(data):
 @socketio.on("set_replay_mode")
 def on_set_replay_mode(data):
     mode = data["mode"]
-    if mode in AVAILABLE_SOUNDS:
+    if mode in get_available_modes():
         state["config"]["replay_mode"] = mode
         save_config(state["config"])
-        socketio.emit("replay_mode", {
-            "mode": mode,
-            "available": AVAILABLE_SOUNDS,
-        })
+        emit_replay_mode()
         log.info("Replay mode set to '%s' from dashboard", mode)
 
 
@@ -866,7 +1176,7 @@ def on_test_sound():
     def _play():
         cfg = state["config"]
         alsa_device = cfg.get("alsa_device") or detect_alsa_device()
-        mode = cfg.get("replay_mode", "echo")
+        mode = resolve_replay_mode(cfg.get("replay_mode", "echo"))
 
         # Non-blocking: skip if that output is already playing something
         lock = pulse_lock if alsa_device == BLUETOOTH_OUTPUT_ID else aplay_lock
@@ -955,15 +1265,98 @@ def on_set_alsa_device(data):
 
 @socketio.on("toggle_enabled")
 def on_toggle_enabled():
-    state["enabled"] = not state["enabled"]
-    enabled = state["enabled"]
-    cb = state.get("cb_state")
-    if cb is not None:
-        cb["paused"] = not enabled
-    status = "listening" if enabled else "disabled"
-    socketio.emit("enabled_state", {"enabled": enabled})
-    socketio.emit("status", {"state": status})
+    enabled = not state["enabled"]
+    state["pause_until"] = None
+    set_enabled(enabled)
+    emit_pause_state()
     log.info("NoisyNeighbors %s from dashboard", "enabled" if enabled else "disabled")
+
+
+@socketio.on("pause_for")
+def on_pause_for(data):
+    """Disable detection for N minutes, or until 08:00 tomorrow ({"until": "tomorrow"})."""
+    now = datetime.now()
+    if data.get("until") == "tomorrow":
+        wake = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        until = wake.timestamp()
+    else:
+        try:
+            minutes = int(data.get("minutes", 30))
+        except (TypeError, ValueError):
+            return
+        until = time.time() + max(1, min(minutes, 24 * 60)) * 60
+    state["pause_until"] = until
+    set_enabled(False)
+    emit_pause_state()
+    log.info("Paused until %s from dashboard", datetime.fromtimestamp(until).strftime("%Y-%m-%d %H:%M"))
+
+
+@socketio.on("save_detection")
+def on_save_detection(data):
+    cfg = state["config"]
+    try:
+        low = float(data.get("filter_low_hz", 20))
+        high = float(data.get("filter_high_hz", 250))
+    except (TypeError, ValueError):
+        return
+    low = max(10.0, min(low, 7900.0))
+    high = max(low + 10.0, min(high, 8000.0))
+    cfg["filter_enabled"] = bool(data.get("filter_enabled", False))
+    cfg["filter_low_hz"] = low
+    cfg["filter_high_hz"] = high
+    cfg["adaptive_threshold"] = bool(data.get("adaptive_threshold", False))
+    save_config(cfg)
+    log.info("Detection saved: filter=%s %.0f-%.0f Hz adaptive=%s",
+             cfg["filter_enabled"], low, high, cfg["adaptive_threshold"])
+
+
+@socketio.on("save_notify")
+def on_save_notify(data):
+    cfg = state["config"]
+    url = str(data.get("url", "")).strip()
+    if url and not url.startswith(("http://", "https://")):
+        return
+    cfg["notify_enabled"] = bool(data.get("enabled", False))
+    cfg["notify_url"] = url
+    cfg["notify_on_boom"] = bool(data.get("on_boom", True))
+    cfg["notify_on_limit"] = bool(data.get("on_limit", True))
+    save_config(cfg)
+    log.info("Notifications saved: enabled=%s", cfg["notify_enabled"])
+
+
+@socketio.on("test_notify")
+def on_test_notify():
+    notify("NoisyNeighbors test", "Test notification from the dashboard", force=True)
+
+
+@socketio.on("set_sound_gain")
+def on_set_sound_gain(data):
+    name = data.get("name")
+    if name not in BUILTIN_SOUNDS + list_custom_sounds():
+        return
+    try:
+        gain = float(np.clip(float(data.get("gain", 1.0)), 0.1, 1.0))
+    except (TypeError, ValueError):
+        return
+    state["config"].setdefault("sound_gains", {})[name] = round(gain, 2)
+    save_config(state["config"])
+    emit_replay_mode()
+
+
+@socketio.on("delete_custom_sound")
+def on_delete_custom_sound(data):
+    name = data.get("name", "")
+    if name not in list_custom_sounds():
+        return
+    os.unlink(os.path.join(CUSTOM_SOUNDS_DIR, f"{name}.wav"))
+    cfg = state["config"]
+    for key in ("replay_mode", "night_replay_mode"):
+        if cfg.get(key) == name:
+            cfg[key] = "echo"
+    cfg.get("sound_gains", {}).pop(name, None)
+    save_config(cfg)
+    log.info("Custom sound deleted: %s", name)
+    emit_replay_mode()
 
 
 @socketio.on("save_schedule")
@@ -988,7 +1381,7 @@ def on_save_night_mode(data):
     except (TypeError, ValueError):
         pass
     mode = data.get("replay_mode", "echo")
-    if mode in AVAILABLE_SOUNDS:
+    if mode in get_available_modes():
         cfg["night_replay_mode"] = mode
     save_config(cfg)
     log.info("Night mode saved: enabled=%s %s-%s", cfg["night_mode_enabled"],
@@ -1153,6 +1546,13 @@ def on_delete_recording(data):
     if os.path.exists(path):
         os.unlink(path)
         log.info("Deleted recording: %s", filename)
+        changed = False
+        for h in state["history"]:
+            if h.get("recording") == filename:
+                h["recording"] = None
+                changed = True
+        if changed:
+            save_history(state["history"])
         socketio.emit("recording_deleted", {"name": filename})
 
 
@@ -1219,7 +1619,8 @@ def audio_loop():
                     t = float(nt)
             pre = int(sr * float(c.get("pre_boom_seconds") or 1.0))
             post = int(sr * float(c.get("post_boom_seconds") or 1.5))
-            cd = float(c.get("cooldown_seconds") or 5)
+            cd = c.get("cooldown_seconds")
+            cd = 5.0 if cd is None else float(cd)  # 0 is a valid "no cooldown"
         except (TypeError, ValueError):
             t, pre, post, cd = 0.15, int(sr * 1.0), int(sr * 1.5), 5
         return t, pre, post, cd
@@ -1227,6 +1628,35 @@ def audio_loop():
     buffer_len = int(sr * 3)
     ring = np.zeros((buffer_len, channels), dtype=np.float32)
     rms_counter = 0
+    # Ambient-noise tracker for the adaptive threshold (running mean/variance)
+    ambient = {"mean": 0.0, "var": 0.0, "n": 0}
+
+    def measure(block):
+        """Detection level: broadband RMS, or RMS inside the configured band."""
+        c = state["config"]
+        if c.get("filter_enabled", False):
+            try:
+                return band_level(block, sr,
+                                  float(c.get("filter_low_hz", 20)),
+                                  float(c.get("filter_high_hz", 250)))
+            except (TypeError, ValueError):
+                pass
+        return float(rms(block))
+
+    def adapt(level, threshold):
+        """Raise the threshold above steady background noise (never lowers it)."""
+        a = ambient
+        if a["n"] == 0:
+            a["mean"], a["var"] = level, 0.0
+        if level <= threshold:
+            alpha = 0.002
+            d = level - a["mean"]
+            a["mean"] += alpha * d
+            a["var"] = (1 - alpha) * (a["var"] + alpha * d * d)
+            a["n"] += 1
+        if a["n"] < 100:  # ~6s warm-up
+            return threshold
+        return min(1.0, max(threshold, a["mean"] + 6 * math.sqrt(a["var"])))
 
     def callback(indata, frames, time_info, status):
         nonlocal rms_counter
@@ -1238,7 +1668,7 @@ def audio_loop():
 
             # Calibration mode: collect ambient RMS samples
             if state["calibrating"]:
-                state["calibration_samples"].append(float(rms(indata)))
+                state["calibration_samples"].append(measure(indata))
                 return
 
             if s["paused"]:
@@ -1268,14 +1698,17 @@ def audio_loop():
                 ring[s["write_pos"]] = indata[i]
                 s["write_pos"] = (s["write_pos"] + 1) % buffer_len
 
-            level = rms(indata)
+            level = measure(indata)
+            if state["config"].get("adaptive_threshold", False):
+                threshold = adapt(level, threshold)
+            state["effective_threshold"] = threshold
 
             rms_counter += 1
             if rms_counter % 5 == 0:
-                socketio.emit("rms", {"level": float(level)})
+                socketio.emit("rms", {"level": level, "threshold": threshold})
 
             if level > threshold:
-                log.info("BOOM detected! RMS=%.4f (threshold=%.4f)", level, threshold)
+                log.info("BOOM detected! level=%.4f (threshold=%.4f)", level, threshold)
                 socketio.emit("status", {"state": "boom"})
                 s["boom_detected"] = True
                 s["post_recording"] = np.zeros((post_samples, channels), dtype=np.float32)
@@ -1326,15 +1759,13 @@ def audio_loop():
                 else:
                     state["hourly_boom_count"] += 1
 
-                # Determine effective replay mode (night mode override)
+                # Determine effective replay mode (night mode override), then resolve
+                # "random"/"escalate" into a concrete sound
                 cur_alsa = state["config"].get("alsa_device") or alsa_device
-                replay_mode = state["config"].get("replay_mode", "echo")
-                if state["config"].get("night_mode_enabled", False):
-                    nm_start = state["config"].get("night_mode_start", "22:00")
-                    nm_end = state["config"].get("night_mode_end", "08:00")
-                    if is_in_time_range(nm_start, nm_end):
-                        replay_mode = state["config"].get("night_replay_mode", replay_mode)
-                        log.info("Night mode active, using replay_mode=%s", replay_mode)
+                configured_mode = effective_replay_mode()
+                replay_mode = resolve_replay_mode(configured_mode, advance=not limit_reached)
+                if configured_mode != state["config"].get("replay_mode", "echo"):
+                    log.info("Night mode active, using replay_mode=%s", configured_mode)
 
                 if not limit_reached:
                     log.info("Playing boom (%.2fs, mode=%s)...", duration, replay_mode)
@@ -1356,12 +1787,12 @@ def audio_loop():
                     log.info("Playback finished")
 
                 # Save recording if enabled
+                recording = None
                 if state["config"].get("save_recordings", False):
-                    threading.Thread(
-                        target=save_recording,
-                        args=(boom_audio.copy(), sr),
-                        daemon=True,
-                    ).start()
+                    try:
+                        recording = save_recording(boom_audio.copy(), sr)
+                    except OSError as e:
+                        log.error("Could not save recording: %s", e)
 
                 # Log detection
                 detection = {
@@ -1369,6 +1800,9 @@ def audio_loop():
                     "time": now.strftime("%H:%M:%S"),
                     "rms": boom_rms,
                     "duration": duration,
+                    "mode": None if limit_reached else replay_mode,
+                    "muted": limit_reached,
+                    "recording": recording,
                 }
                 state["history"].append(detection)
                 save_history(state["history"])
@@ -1378,15 +1812,23 @@ def audio_loop():
                     state["today_count"] = 0
                 state["today_count"] += 1
 
-                socketio.emit("boom", {
-                    "time": detection["time"],
-                    "rms": boom_rms,
-                    "duration": duration,
-                    "today_count": state["today_count"],
-                    "limit_reached": limit_reached,
-                    "hourly_count": state["hourly_boom_count"],
-                    "max_per_hour": max_per_hour,
-                })
+                socketio.emit("boom", dict(
+                    detection,
+                    today_count=state["today_count"],
+                    limit_reached=limit_reached,
+                    hourly_count=state["hourly_boom_count"],
+                    max_per_hour=max_per_hour,
+                ))
+
+                cfg_now = state["config"]
+                if limit_reached:
+                    if cfg_now.get("notify_on_limit", True) and state["limit_notified_hour"] != (str(now.date()), now.hour):
+                        state["limit_notified_hour"] = (str(now.date()), now.hour)
+                        notify("NoisyNeighbors: hourly limit reached",
+                               f"{max_per_hour} responses this hour; further booms are logged but not answered.")
+                elif cfg_now.get("notify_on_boom", True):
+                    notify("NoisyNeighbors: boom detected",
+                           f"{detection['time']} - {to_db(boom_rms):.0f} dB, played {replay_mode}")
 
                 if not limit_reached:
                     _, _, _, cooldown = get_cfg_values()
@@ -1426,6 +1868,8 @@ def main():
     threading.Thread(target=scheduler_loop, daemon=True).start()
     # Start strike mode thread
     threading.Thread(target=strike_loop, daemon=True).start()
+    # Start timed-pause expiry thread
+    threading.Thread(target=pause_loop, daemon=True).start()
 
     # Start audio detection thread (auto-restarts)
     def audio_loop_wrapper():
