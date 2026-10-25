@@ -414,9 +414,9 @@
             </div>
             <div class="small">Random picks a different sound each time. Escalate walks from gentle to loud on consecutive booms and resets after 10 quiet minutes.</div>
             <div class="field">
-                <span class="field-label">Custom sounds (WAV, 16-bit, up to 30 s)</span>
+                <span class="field-label">Custom sounds (MP3 or WAV, up to 30 s)</span>
                 <div class="btn-row" style="margin-top: 0;">
-                    <input type="file" id="soundFile" accept=".wav,audio/wav" style="flex: 1; min-width: 0;">
+                    <input type="file" id="soundFile" accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*" style="flex: 1; min-width: 0;">
                     <button class="btn btn-primary" id="uploadBtn" onclick="uploadSound()">Upload</button>
                 </div>
                 <div class="small" id="uploadStatus"></div>
@@ -992,7 +992,7 @@ $('soundGain').addEventListener('change', function () { socket.emit('set_sound_g
 function uploadSound() {
     const f = $('soundFile').files[0];
     const status = $('uploadStatus');
-    if (!f) { status.textContent = 'Choose a WAV file first.'; return; }
+    if (!f) { status.textContent = 'Choose an audio file first.'; return; }
     const fd = new FormData();
     fd.append('file', f);
     $('uploadBtn').disabled = true;

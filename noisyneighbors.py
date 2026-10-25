@@ -16,6 +16,7 @@ import random
 import logging
 import tempfile
 import threading
+import shutil
 import subprocess
 import urllib.request
 from datetime import datetime, date, timedelta
@@ -1006,20 +1007,55 @@ def report():
     )
 
 
+def wav_info(data):
+    """(is_playable_wav, seconds) for raw bytes; (False, 0) if not a readable WAV."""
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            ok = w.getsampwidth() == 2 and w.getnchannels() in (1, 2)
+            return ok, w.getnframes() / float(w.getframerate() or 1)
+    except (wave.Error, EOFError):
+        return False, 0.0
+
+
+def convert_to_wav(data):
+    """Decode any audio ffmpeg understands (MP3, M4A, OGG, FLAC, 24-bit WAV...) to
+    16-bit stereo 44.1 kHz WAV. Returns (wav_bytes, None) or (None, error message)."""
+    if shutil.which("ffmpeg") is None:
+        return None, ("Only 16-bit WAV files can be read on this device. "
+                      "Install ffmpeg (sudo apt install ffmpeg) to upload MP3 and other formats.")
+    with tempfile.TemporaryDirectory() as tmp:
+        src, dst = os.path.join(tmp, "in"), os.path.join(tmp, "out.wav")
+        with open(src, "wb") as f:
+            f.write(data)
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file",
+                 "-i", src, "-t", str(MAX_CUSTOM_SOUND_SECONDS + 1), "-vn",
+                 "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", dst],
+                capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            return None, "Conversion took too long"
+        if r.returncode != 0 or not os.path.exists(dst):
+            log.warning("ffmpeg could not convert upload: %s", r.stderr.strip()[:300])
+            return None, "Could not read this audio file"
+        with open(dst, "rb") as f:
+            return f.read(), None
+
+
 @app.route("/sounds/upload", methods=["POST"])
 def upload_sound():
     f = request.files.get("file")
     if f is None or not f.filename:
         return jsonify({"ok": False, "error": "No file received"}), 400
     data = f.read()
-    try:
-        with wave.open(io.BytesIO(data)) as w:
-            ok_fmt = w.getsampwidth() == 2 and w.getnchannels() in (1, 2)
-            seconds = w.getnframes() / float(w.getframerate() or 1)
-    except (wave.Error, EOFError):
-        return jsonify({"ok": False, "error": "Not a valid WAV file"}), 400
-    if not ok_fmt:
-        return jsonify({"ok": False, "error": "WAV must be 16-bit PCM, mono or stereo"}), 400
+    ok_fmt, seconds = wav_info(data)
+    if not ok_fmt:  # not a plain 16-bit WAV: let ffmpeg decode it (MP3, M4A, OGG, FLAC...)
+        data, err = convert_to_wav(data)
+        if err:
+            return jsonify({"ok": False, "error": err}), 400
+        ok_fmt, seconds = wav_info(data)
+        if not ok_fmt:
+            return jsonify({"ok": False, "error": "Could not read this audio file"}), 400
     if seconds > MAX_CUSTOM_SOUND_SECONDS:
         return jsonify({"ok": False, "error": f"Sound is longer than {MAX_CUSTOM_SOUND_SECONDS}s"}), 400
     name = re.sub(r"[^a-z0-9_-]", "_", os.path.splitext(f.filename)[0].lower())[:32] or "sound"

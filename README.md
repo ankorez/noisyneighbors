@@ -156,7 +156,7 @@ This lists all available devices with their index, channel count, and sample rat
 
 ### Custom sounds
 
-Upload WAV files (16-bit PCM, mono or stereo, up to 30 s) from **Config → Response Sound**. They are stored in `custom_sounds/` (not tracked by git) and appear in the sound dropdowns.
+Upload MP3 (or WAV, M4A, OGG, FLAC) files up to 30 s from **Config → Response Sound**. Anything that isn't a plain 16-bit WAV is converted on upload with `ffmpeg` (installed by `setup.sh`; on an existing install run `sudo apt install ffmpeg`). Sounds are stored as WAV in `custom_sounds/` (not tracked by git) and appear in the sound dropdowns.
 
 ### Reducing false triggers
 
