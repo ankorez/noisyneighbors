@@ -244,8 +244,8 @@
         .device-row .connected { color: var(--ok); font-weight: 600; }
         .custom-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 13px; color: var(--muted); }
         a.link { color: var(--info); }
-        input[type="file"] { color: var(--muted); font-size: 13px; }
-        input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px; border: none; border-radius: 10px; background: var(--inset2); color: var(--text); font-family: inherit; font-weight: 600; cursor: pointer; }
+        label.btn { cursor: pointer; }
+        .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
 
         /* Toasts */
         #toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center; width: calc(100% - 32px); max-width: 360px; pointer-events: none; }
@@ -416,7 +416,9 @@
             <div class="field">
                 <span class="field-label">Custom sounds (MP3 or WAV, up to 30 s)</span>
                 <div class="btn-row" style="margin-top: 0;">
-                    <input type="file" id="soundFile" accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*" style="flex: 1; min-width: 0;">
+                    <input type="file" id="soundFile" accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*" hidden onchange="document.getElementById('soundFileName').textContent = this.files[0] ? this.files[0].name : 'No file chosen'">
+                    <label class="btn" for="soundFile">Choose file</label>
+                    <span class="file-name" id="soundFileName">No file chosen</span>
                     <button class="btn btn-primary" id="uploadBtn" onclick="uploadSound()">Upload</button>
                 </div>
                 <div class="small" id="uploadStatus"></div>
@@ -1001,7 +1003,7 @@ function uploadSound() {
         .then((r) => r.json())
         .then((res) => {
             status.textContent = res.ok ? 'Added "' + res.name + '"' : 'Failed: ' + res.error;
-            if (res.ok) $('soundFile').value = '';
+            if (res.ok) { $('soundFile').value = ''; $('soundFileName').textContent = 'No file chosen'; }
         })
         .catch(() => { status.textContent = 'Upload failed (file too large or connection lost).'; })
         .then(() => { $('uploadBtn').disabled = false; });
