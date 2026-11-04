@@ -1,7 +1,42 @@
 # NoisyNeighbors
 
 Detects neighbor booms and automatically plays them back. Includes a real-time web dashboard for monitoring and configuration.
-<img width="2074" height="1394" alt="image" src="https://github.com/user-attachments/assets/87140861-59c3-4cd9-9f0f-95a070aab987" />
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/live-light.png">
+    <img alt="NoisyNeighbors dashboard: live level meter, status and detection history" src="docs/screenshots/live-dark.png" width="760">
+  </picture>
+</p>
+
+## Features
+
+- **Detection** — live level meter in dB with a 60-second trace, adjustable threshold, one-click auto-calibration, an optional frequency filter (thumps and bass only) and an adaptive threshold that rises above steady background noise.
+- **Responses** — replay the boom, built-in sounds, your own MP3/WAV uploads, *Random* or *Escalate* (gentle to loud), a level per sound, PS4 controller vibration, and output to a Bluetooth speaker.
+- **Control** — night mode, scheduler, timed pause (30 min to tomorrow morning), strike mode and an hourly response limit.
+- **History** — detection log, weekday × hour heatmap, CSV export, a printable report (e.g. for your landlord) and optional audio recordings.
+- **Alerts and access** — push notifications (ntfy-style) and an optional dashboard password.
+- **Dashboard** — works offline, usable on a phone, automatic light/dark theme.
+
+## Screenshots
+
+Taken with demo data.
+
+<table>
+  <tr>
+    <td align="center"><img alt="Config tab" src="docs/screenshots/config-dark.png" width="290"><br><sub>Config — collapsible sections with their current state</sub></td>
+    <td align="center"><img alt="Devices tab" src="docs/screenshots/devices-dark.png" width="290"><br><sub>Devices — audio, PS4 controller, Bluetooth</sub></td>
+    <td align="center"><img alt="Stats tab" src="docs/screenshots/stats-dark.png" width="290"><br><sub>Stats — charts, heatmap, export</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center"><img alt="Mobile, dark" src="docs/screenshots/mobile-live-dark.png" width="200"><br><sub>Mobile, dark</sub></td>
+    <td align="center"><img alt="Mobile, light" src="docs/screenshots/mobile-live-light.png" width="200"><br><sub>Mobile, light</sub></td>
+    <td align="center"><img alt="Mobile config" src="docs/screenshots/mobile-config-dark.png" width="200"><br><sub>Mobile config</sub></td>
+  </tr>
+</table>
 
 ## Hardware
 
